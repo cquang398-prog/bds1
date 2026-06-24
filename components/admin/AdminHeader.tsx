@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, Search, User } from 'lucide-react';
+import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,8 +10,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { notifications as mockNotifications } from '@/lib/data/mock-data';
 
 export function AdminHeader() {
+  const unreadCount = mockNotifications.filter((n) => !n.isRead).length;
+
   return (
     <header className="h-16 bg-white border-b px-6 flex items-center justify-between">
       <div className="flex items-center gap-4 flex-1">
@@ -21,9 +25,15 @@ export function AdminHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
+        <Button variant="ghost" size="icon" className="relative" asChild>
+          <Link href="/admin/system/notifications">
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
         </Button>
 
         <DropdownMenu>
