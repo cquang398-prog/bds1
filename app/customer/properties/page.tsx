@@ -1,18 +1,19 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { properties, priceRanges, amenities, roomTypes, areas } from '@/lib/data/mock-data';
-import { Filter, MapPin, Bed, Bath, Square, Search, SlidersHorizontal } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { properties, amenities, roomTypes, areas } from '@/lib/data/mock-data';
+import { Filter, MapPin, Bed, Bath, Square, SlidersHorizontal, Heart, Phone, Calendar } from 'lucide-react';
 
 const statusLabels: Record<string, string> = {
   available: 'Còn trống',
@@ -21,18 +22,58 @@ const statusLabels: Record<string, string> = {
   pending: 'Đang chờ',
 };
 
+function useFavorites() {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('property-favorites');
+      if (stored) setFavorites(new Set(JSON.parse(stored)));
+    } catch {}
+  }, []);
+
+  const toggle = useCallback((id: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem('property-favorites', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  return { favorites, toggle };
+}
+
 export default function PropertiesPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams?.get('q') || '';
+
   const [selectedArea, setSelectedArea] = useState<string>('');
   const [selectedRoomType, setSelectedRoomType] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+
+  // Display state — updates instantly while dragging
+  const [priceSlider, setPriceSlider] = useState<number[]>([500000, 100000000]);
+  // Filter state — updates only on mouse release
   const [priceRange, setPriceRange] = useState<number[]>([500000, 100000000]);
+
+  const [sizeSlider, setSizeSlider] = useState<number[]>([0, 500]);
   const [sizeRange, setSizeRange] = useState<number[]>([0, 500]);
+
+  const { favorites, toggle: toggleFavorite } = useFavorites();
+  const [isContactOpen, setIsContactOpen] = useState(false);
+  const [heartAnimating, setHeartAnimating] = useState<string | null>(null);
 
   const filteredProperties = useMemo(() => {
     return properties.filter((property) => {
-      const matchesSearch = property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const matchesSearch =
+        !searchQuery ||
+        property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         property.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         property.address.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesArea = !selectedArea || property.area === selectedArea;
@@ -40,11 +81,13 @@ export default function PropertiesPage() {
       const matchesStatus = !selectedStatus || property.status === selectedStatus;
       const matchesPrice = property.price >= priceRange[0] && property.price <= priceRange[1];
       const matchesSize = property.size >= sizeRange[0] && property.size <= sizeRange[1];
-      const matchesAmenities = selectedAmenities.length === 0 ||
+      const matchesAmenities =
+        selectedAmenities.length === 0 ||
         selectedAmenities.every((a) => property.amenities.includes(a));
-
-      return matchesSearch && matchesArea && matchesRoomType && matchesStatus &&
-        matchesPrice && matchesSize && matchesAmenities;
+      return (
+        matchesSearch && matchesArea && matchesRoomType && matchesStatus &&
+        matchesPrice && matchesSize && matchesAmenities
+      );
     });
   }, [searchQuery, selectedArea, selectedRoomType, selectedStatus, selectedAmenities, priceRange, sizeRange]);
 
@@ -55,33 +98,32 @@ export default function PropertiesPage() {
   };
 
   const clearFilters = () => {
-    setSearchQuery('');
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.delete('q');
+    const qs = params.toString();
+    router.replace(`/customer/properties${qs ? `?${qs}` : ''}`, { scroll: false });
     setSelectedArea('');
     setSelectedRoomType('');
     setSelectedStatus('');
     setSelectedAmenities([]);
+    setPriceSlider([500000, 100000000]);
     setPriceRange([500000, 100000000]);
+    setSizeSlider([0, 500]);
     setSizeRange([0, 500]);
   };
 
-  const hasActiveFilters = searchQuery || selectedArea || selectedRoomType || selectedStatus ||
+  const hasActiveFilters =
+    !!searchQuery || selectedArea || selectedRoomType || selectedStatus ||
     selectedAmenities.length > 0 || priceRange[0] > 500000 || priceRange[1] < 100000000 ||
     sizeRange[0] > 0 || sizeRange[1] < 500;
 
-  const SearchBar = () => (
-    <div>
-      <h3 className="font-semibold mb-3">Tìm kiếm</h3>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <Input
-          placeholder="Tìm bất động sản..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-    </div>
-  );
+  const handleHeartClick = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFavorite(id);
+    setHeartAnimating(id);
+    setTimeout(() => setHeartAnimating(null), 300);
+  };
 
   const FilterContent = () => (
     <div className="space-y-6">
@@ -89,16 +131,21 @@ export default function PropertiesPage() {
         <h3 className="font-semibold mb-3">Khoảng giá</h3>
         <div className="px-2">
           <Slider
-            value={priceRange}
-            onValueChange={setPriceRange}
+            value={priceSlider}
+            onValueChange={setPriceSlider}
+            onValueCommit={(v) => setPriceRange(v)}
             min={500000}
             max={100000000}
             step={500000}
             className="w-full"
           />
           <div className="flex justify-between mt-3 text-sm font-medium text-slate-700">
-            <span className="tabular-nums">{(priceRange[0] / 1000000).toFixed(1).replace(/\.0$/, '')} triệu đ</span>
-            <span className="tabular-nums">{(priceRange[1] / 1000000).toFixed(0)} triệu đ</span>
+            <span className="tabular-nums">
+              {(priceSlider[0] / 1000000).toFixed(1).replace(/\.0$/, '')} triệu đ
+            </span>
+            <span className="tabular-nums">
+              {(priceSlider[1] / 1000000).toFixed(0)} triệu đ
+            </span>
           </div>
         </div>
       </div>
@@ -107,15 +154,16 @@ export default function PropertiesPage() {
         <h3 className="font-semibold mb-3">Diện tích (m²)</h3>
         <div className="px-2">
           <Slider
-            value={sizeRange}
-            onValueChange={setSizeRange}
+            value={sizeSlider}
+            onValueChange={setSizeSlider}
+            onValueCommit={(v) => setSizeRange(v)}
             max={500}
             step={5}
             className="w-full"
           />
           <div className="flex justify-between mt-3 text-sm font-medium text-slate-700">
-            <span className="tabular-nums">{sizeRange[0]}m²</span>
-            <span className="tabular-nums">{sizeRange[1]}m²</span>
+            <span className="tabular-nums">{sizeSlider[0]}m²</span>
+            <span className="tabular-nums">{sizeSlider[1]}m²</span>
           </div>
         </div>
       </div>
@@ -243,10 +291,7 @@ export default function PropertiesPage() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[320px] flex flex-col overflow-hidden">
-              <div className="pt-6 pb-4 border-b">
-                <SearchBar />
-              </div>
-              <div className="flex-1 overflow-y-auto py-4">
+              <div className="flex-1 overflow-y-auto py-6">
                 <FilterContent />
               </div>
             </SheetContent>
@@ -255,13 +300,10 @@ export default function PropertiesPage() {
       </div>
 
       <div className="flex gap-8">
-        {/* Sidebar Filters - Desktop */}
+        {/* Sidebar Filters — Desktop */}
         <aside className="hidden lg:block w-72 flex-shrink-0">
           <div className="sticky top-20 flex flex-col max-h-[calc(100vh-5.5rem)]">
-            <div className="pb-4 border-b bg-white">
-              <SearchBar />
-            </div>
-            <div className="flex-1 overflow-y-auto pt-4 pr-1 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto pr-1">
               <FilterContent />
             </div>
           </div>
@@ -281,8 +323,12 @@ export default function PropertiesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredProperties.map((property) => (
-                <Link key={property.id} href={`/customer/properties/${property.id}`}>
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
+                <Card
+                  key={property.id}
+                  className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col"
+                >
+                  {/* Clickable area → property detail */}
+                  <Link href={`/customer/properties/${property.id}`} className="block flex-1">
                     <div className="relative h-48">
                       <Image
                         src={property.images[0]}
@@ -290,6 +336,21 @@ export default function PropertiesPage() {
                         fill
                         className="object-cover"
                       />
+                      {/* Heart / Favorite */}
+                      <button
+                        onClick={(e) => handleHeartClick(e, property.id)}
+                        className={`absolute top-3 left-3 h-8 w-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm hover:bg-white transition-colors ${heartAnimating === property.id ? 'heart-pop' : ''}`}
+                        aria-label="Yêu thích"
+                      >
+                        <Heart
+                          className="h-4 w-4"
+                          style={{
+                            fill: favorites.has(property.id) ? '#ef4444' : 'none',
+                            stroke: favorites.has(property.id) ? '#ef4444' : '#64748b',
+                          }}
+                        />
+                      </button>
+                      {/* Status badge */}
                       <div className="absolute top-3 right-3">
                         <Badge
                           variant={
@@ -313,7 +374,7 @@ export default function PropertiesPage() {
                         {property.area}
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pb-3">
                       <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
                         <span className="flex items-center gap-1">
                           <Bed className="h-4 w-4" />
@@ -332,13 +393,62 @@ export default function PropertiesPage() {
                         {property.price.toLocaleString('vi-VN')}đ/tháng
                       </p>
                     </CardContent>
-                  </Card>
-                </Link>
+                  </Link>
+
+                  {/* Action buttons — outside Link to avoid nesting */}
+                  <div className="px-6 pb-4 pt-1 border-t border-slate-100 mt-auto">
+                    <div className="flex gap-2 pt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-9"
+                        onClick={() => router.push(`/customer/properties/${property.id}`)}
+                      >
+                        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                        Hẹn xem
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 h-9"
+                        onClick={() => setIsContactOpen(true)}
+                      >
+                        <Phone className="h-3.5 w-3.5 mr-1.5" />
+                        Liên Hệ
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Contact Dialog */}
+      <Dialog open={isContactOpen} onOpenChange={setIsContactOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 justify-center">
+              <Phone className="h-5 w-5" />
+              Liên Hệ Môi Giới
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 pt-2 pb-2 text-center">
+            <div className="flex items-center justify-center gap-3 py-2">
+              <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <Phone className="h-6 w-6 text-slate-600" />
+              </div>
+              <span className="text-2xl font-semibold text-slate-800">(028) 1234-5678</span>
+            </div>
+            <Button className="w-full" size="lg" asChild>
+              <a href="tel:02812345678">
+                <Phone className="h-4 w-4 mr-2" />
+                Gọi ngay
+              </a>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
