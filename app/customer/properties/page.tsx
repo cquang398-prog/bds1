@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ViewingRequestDialog } from '@/components/customer/ViewingRequestDialog';
 import { properties, amenities, roomTypes, areas } from '@/lib/data/mock-data';
 import { Filter, MapPin, Bed, Bath, Square, SlidersHorizontal, Heart, Phone, Calendar } from 'lucide-react';
 
@@ -68,6 +69,7 @@ export default function PropertiesPage() {
   const { favorites, toggle: toggleFavorite } = useFavorites();
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [heartAnimating, setHeartAnimating] = useState<string | null>(null);
+  const [viewingProperty, setViewingProperty] = useState<{ id: string; title: string; address: string } | null>(null);
 
   const filteredProperties = useMemo(() => {
     return properties.filter((property) => {
@@ -402,7 +404,13 @@ export default function PropertiesPage() {
                         variant="outline"
                         size="sm"
                         className="flex-1 h-9"
-                        onClick={() => router.push(`/customer/properties/${property.id}`)}
+                        onClick={() =>
+                          setViewingProperty({
+                            id: property.id,
+                            title: property.title,
+                            address: property.address,
+                          })
+                        }
                       >
                         <Calendar className="h-3.5 w-3.5 mr-1.5" />
                         Hẹn xem
@@ -449,6 +457,13 @@ export default function PropertiesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Viewing Request Dialog */}
+      <ViewingRequestDialog
+        open={viewingProperty !== null}
+        onOpenChange={(open) => { if (!open) setViewingProperty(null); }}
+        property={viewingProperty}
+      />
     </div>
   );
 }
