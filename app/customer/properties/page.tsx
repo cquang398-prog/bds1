@@ -68,21 +68,23 @@ export default function PropertiesPage() {
     selectedAmenities.length > 0 || priceRange[0] > 500000 || priceRange[1] < 100000000 ||
     sizeRange[0] > 0 || sizeRange[1] < 500;
 
+  const SearchBar = () => (
+    <div>
+      <h3 className="font-semibold mb-3">Tìm kiếm</h3>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Input
+          placeholder="Tìm bất động sản..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+    </div>
+  );
+
   const FilterContent = () => (
     <div className="space-y-6">
-      <div>
-        <h3 className="font-semibold mb-3">Tìm kiếm</h3>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Tìm bất động sản..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
-
       <div>
         <h3 className="font-semibold mb-3">Khoảng giá</h3>
         <div className="px-2">
@@ -92,11 +94,11 @@ export default function PropertiesPage() {
             min={500000}
             max={100000000}
             step={500000}
-            className="w-full [&_[role=slider]]:transition-all [&_[role=slider]]:duration-150 [&_.range]:transition-all [&_.range]:duration-150"
+            className="w-full"
           />
-          <div className="flex justify-between mt-2 text-sm text-slate-600">
-            <span>{(priceRange[0] / 1000000).toFixed(1).replace(/\.0$/, '')} triệu đ</span>
-            <span>{(priceRange[1] / 1000000).toFixed(0)} triệu đ</span>
+          <div className="flex justify-between mt-3 text-sm font-medium text-slate-700">
+            <span className="tabular-nums">{(priceRange[0] / 1000000).toFixed(1).replace(/\.0$/, '')} triệu đ</span>
+            <span className="tabular-nums">{(priceRange[1] / 1000000).toFixed(0)} triệu đ</span>
           </div>
         </div>
       </div>
@@ -108,12 +110,12 @@ export default function PropertiesPage() {
             value={sizeRange}
             onValueChange={setSizeRange}
             max={500}
-            step={10}
+            step={5}
             className="w-full"
           />
-          <div className="flex justify-between mt-2 text-sm text-slate-600">
-            <span>{sizeRange[0]}m²</span>
-            <span>{sizeRange[1]}m²</span>
+          <div className="flex justify-between mt-3 text-sm font-medium text-slate-700">
+            <span className="tabular-nums">{sizeRange[0]}m²</span>
+            <span className="tabular-nums">{sizeRange[1]}m²</span>
           </div>
         </div>
       </div>
@@ -240,8 +242,13 @@ export default function PropertiesPage() {
                 Bộ lọc
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[320px] overflow-y-auto">
-              <FilterContent />
+            <SheetContent side="left" className="w-[320px] flex flex-col overflow-hidden">
+              <div className="pt-6 pb-4 border-b">
+                <SearchBar />
+              </div>
+              <div className="flex-1 overflow-y-auto py-4">
+                <FilterContent />
+              </div>
             </SheetContent>
           </Sheet>
         </div>
@@ -250,8 +257,13 @@ export default function PropertiesPage() {
       <div className="flex gap-8">
         {/* Sidebar Filters - Desktop */}
         <aside className="hidden lg:block w-72 flex-shrink-0">
-          <div className="sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-1 scrollbar-thin">
-            <FilterContent />
+          <div className="sticky top-20 flex flex-col max-h-[calc(100vh-5.5rem)]">
+            <div className="pb-4 border-b bg-white">
+              <SearchBar />
+            </div>
+            <div className="flex-1 overflow-y-auto pt-4 pr-1 scrollbar-thin">
+              <FilterContent />
+            </div>
           </div>
         </aside>
 
