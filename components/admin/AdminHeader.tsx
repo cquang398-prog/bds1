@@ -11,12 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { notifications as mockNotifications } from '@/lib/data/mock-data';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useNotifications } from '@/lib/hooks/useNotifications';
 
 export function AdminHeader() {
-  const { profile, company, signOut } = useAuth();
-  const unreadCount = mockNotifications.filter((n) => !n.isRead).length;
+  const { profile, company, signOut, user } = useAuth();
+  const { unreadCount } = useNotifications(user?.id, company?.id);
 
   return (
     <header className="h-16 bg-white border-b px-6 flex items-center justify-between">

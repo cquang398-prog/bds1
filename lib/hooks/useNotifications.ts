@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getActivityLogs } from '@/lib/supabase/repositories/notifications';
+import { supabase } from '@/lib/supabase/client';
 import type { Database } from '@/lib/supabase/types';
 
 type DBNotification = Database['public']['Tables']['notifications']['Row'];
@@ -18,13 +19,59 @@ export function useNotifications(userId?: string, companyId?: string) {
     setLoading(false);
   }, [userId, companyId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  // Realtime subscription: prepend new notifications as they arrive
+  useEffect(() => {
+    if (!companyId) return;
+
+    const channel = supabase
+      .channel(`notifications:${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as DBNotification;
+          // Only prepend if matches recipient filter (or no filter)
+          if (!userId || newRow.recipient_id === null || newRow.recipient_id === userId) {
+            setNotifications((prev) => [newRow, ...prev]);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          const updated = payload.new as DBNotification;
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === updated.id ? updated : n))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [companyId, userId]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const markRead = async (id: string) => {
     await markNotificationRead(id);
-    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
   };
 
   const markAllRead = async () => {
@@ -42,10 +89,38 @@ export function useActivityLogs(companyId?: string) {
 
   useEffect(() => {
     setLoading(true);
-    getActivityLogs(companyId).then((data) => {
-      setLogs(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    getActivityLogs(companyId)
+      .then((data) => {
+        setLogs(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [companyId]);
+
+  // Realtime subscription: prepend new activity logs
+  useEffect(() => {
+    if (!companyId) return;
+
+    const channel = supabase
+      .channel(`activity_logs:${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as DBActivityLog;
+          setLogs((prev) => [newRow, ...prev].slice(0, 50));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [companyId]);
 
   return { logs, loading };

@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Building2, Home, CalendarDays, Users, TrendingUp, DollarSign,
+  Building2, Home, CalendarDays, Users, DollarSign,
   UserSearch, MessageSquare, Bell, AlertCircle, Loader2,
+  Activity, PlusCircle, Pencil, Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { getDashboardStats } from '@/lib/supabase/repositories/dashboard';
+import { useActivityLogs } from '@/lib/hooks/useNotifications';
 
 const statusColors: Record<string, string> = {
   confirmed: 'bg-green-100 text-green-700',
@@ -38,6 +40,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { logs: activityLogs } = useActivityLogs(company?.id);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -171,6 +174,44 @@ export default function AdminDashboardPage() {
                 <span className="text-slate-500">Tổng số phòng</span>
                 <span className="font-bold text-slate-800">{stats.totalRooms}</span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Realtime Activity Feed */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-slate-500" />
+                  <CardTitle className="text-base">Hoạt động gần đây</CardTitle>
+                  <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" title="Realtime" />
+                </div>
+                <Link href="/admin/system/activity-logs" className="text-xs text-blue-600 hover:underline">Xem tất cả</Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {activityLogs.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-sm">Chưa có hoạt động nào</div>
+              ) : (
+                <div className="space-y-0 divide-y divide-slate-50">
+                  {activityLogs.slice(0, 8).map((log) => {
+                    const ActionIcon = log.action === 'CREATE' ? PlusCircle : log.action === 'DELETE' ? Trash2 : Pencil;
+                    const actionColor = log.action === 'CREATE' ? 'text-green-500' : log.action === 'DELETE' ? 'text-red-500' : 'text-blue-500';
+                    const time = new Date(log.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    return (
+                      <div key={log.id} className="flex items-start gap-3 py-2.5">
+                        <div className={`mt-0.5 flex-shrink-0 ${actionColor}`}>
+                          <ActionIcon className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-slate-700 truncate">{log.detail ?? log.entity_label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{log.user_name} · {time}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
