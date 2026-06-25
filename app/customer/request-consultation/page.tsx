@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle2, MessageSquare, Building2, Banknote, UserCircle } from 'lucide-react';
+import { CheckCircle2, MessageSquare, Building2, Banknote, UserCircle, AlertCircle } from 'lucide-react';
+import { createConsultation } from '@/lib/supabase/repositories/consultations';
+import { createLead, createLeadActivity } from '@/lib/supabase/repositories/leads';
 
 const sources = [
   { value: 'website', label: 'Website' },
@@ -33,16 +35,91 @@ const areaOptions = [
   'Quận 1', 'Quận 2 (Thảo Điền)', 'Quận 7 (Phú Mỹ Hưng)', 'Quận Bình Thạnh', 'Quận Tân Bình', 'Quận 4',
 ];
 
+type LeadSource = 'website' | 'facebook' | 'tiktok' | 'zalo' | 'chotot' | 'referral' | 'cold_call' | 'walk_in' | 'other';
+
+const sourceToLeadSource: Record<string, LeadSource> = {
+  website: 'website',
+  facebook: 'facebook',
+  zalo: 'zalo',
+  tiktok: 'tiktok',
+  referral: 'referral',
+  other: 'other',
+};
+
 export default function RequestConsultationPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    setSubmitted(true);
+    setError(null);
+
+    const fd = new FormData(e.currentTarget);
+    const full_name = fd.get('fullName') as string;
+    const phone = fd.get('phone') as string;
+    const email = (fd.get('email') as string) || undefined;
+    const preferredArea = (fd.get('preferredArea') as string) || null;
+    const preferredRoomType = (fd.get('preferredRoomType') as string) || null;
+    const budgetValue = (fd.get('budget') as string) || '0';
+    const sourceValue = (fd.get('source') as string) || 'website';
+    const notes = (fd.get('notes') as string) || null;
+
+    const interest = [preferredRoomType, preferredArea].filter(Boolean).join(', ') || null;
+    const consultationMessage = [
+      interest && `Quan tâm: ${interest}`,
+      budgetValue !== '0' && `Ngân sách: ${Number(budgetValue).toLocaleString('vi-VN')}đ/tháng`,
+      notes,
+    ].filter(Boolean).join('. ') || 'Yêu cầu tư vấn bất động sản';
+
+    try {
+      // 1. Create consultation record
+      const consultation = await createConsultation({
+        full_name,
+        phone,
+        email,
+        message: consultationMessage,
+        source: 'website',
+      });
+
+      // 2. Create CRM lead
+      const leadSource: LeadSource = sourceToLeadSource[sourceValue] ?? 'website';
+      const lead = await createLead({
+        company_id: null,
+        full_name,
+        phone,
+        email: email ?? null,
+        source: leadSource,
+        status: 'new',
+        interest,
+        budget: Number(budgetValue) || 0,
+        preferred_area: preferredArea,
+        preferred_room_type: preferredRoomType,
+        interested_area: preferredArea,
+        assigned_to: null,
+        notes: consultationMessage,
+        last_contacted_at: null,
+      });
+
+      // 3. Create initial lead activity
+      await createLeadActivity({
+        lead_id: lead.id,
+        company_id: null,
+        type: 'note',
+        content: 'Lead created from website consultation form',
+        old_status: null,
+        new_status: null,
+        created_by: null,
+        created_by_name: 'Website',
+      });
+
+      setSubmitted(true);
+    } catch (err: any) {
+      setError('Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -85,6 +162,12 @@ export default function RequestConsultationPage() {
 
         <Card>
           <CardContent className="p-6 sm:p-8">
+            {error && (
+              <div className="flex items-center gap-2 p-3 mb-5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />{error}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Personal Info */}
               <div>
@@ -119,28 +202,16 @@ export default function RequestConsultationPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="preferredArea">Khu vực mong muốn</Label>
-                    <select
-                      id="preferredArea"
-                      name="preferredArea"
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1"
-                    >
+                    <select id="preferredArea" name="preferredArea" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1">
                       <option value="">Tất cả khu vực</option>
-                      {areaOptions.map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
+                      {areaOptions.map((a) => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
                   <div>
                     <Label htmlFor="preferredRoomType">Loại phòng</Label>
-                    <select
-                      id="preferredRoomType"
-                      name="preferredRoomType"
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1"
-                    >
+                    <select id="preferredRoomType" name="preferredRoomType" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1">
                       <option value="">Tất cả loại</option>
-                      {roomTypeOptions.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
+                      {roomTypeOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
                 </div>
@@ -157,27 +228,15 @@ export default function RequestConsultationPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="budget">Ngân sách</Label>
-                    <select
-                      id="budget"
-                      name="budget"
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1"
-                    >
-                      <option value="">Chưa xác định</option>
-                      {budgetRanges.map((b) => (
-                        <option key={b.value} value={b.value}>{b.label}</option>
-                      ))}
+                    <select id="budget" name="budget" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1">
+                      <option value="0">Chưa xác định</option>
+                      {budgetRanges.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <Label htmlFor="source">Biết đến qua</Label>
-                    <select
-                      id="source"
-                      name="source"
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1"
-                    >
-                      {sources.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
+                    <select id="source" name="source" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm mt-1">
+                      {sources.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
                 </div>

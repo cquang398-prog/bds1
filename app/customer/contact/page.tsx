@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Phone, Mail, MapPin, Clock, Send, CheckCircle2 } from 'lucide-react';
+import { Phone, Mail, MapPin, Clock, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { createConsultation } from '@/lib/supabase/repositories/consultations';
+import { createLead, createLeadActivity } from '@/lib/supabase/repositories/leads';
 
 const contactInfo = [
   { icon: Phone, label: 'Hotline', value: '(028) 1234-5678', href: 'tel:02812345678' },
@@ -18,13 +20,67 @@ const contactInfo = [
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    setSubmitted(true);
+    setError(null);
+
+    const fd = new FormData(e.currentTarget);
+    const full_name = fd.get('fullName') as string;
+    const phone = fd.get('phone') as string;
+    const email = (fd.get('email') as string) || undefined;
+    const subject = (fd.get('subject') as string) || '';
+    const messageText = fd.get('message') as string;
+    const message = subject ? `[${subject}] ${messageText}` : messageText;
+
+    try {
+      // 1. Create consultation record
+      const consultation = await createConsultation({
+        full_name,
+        phone,
+        email,
+        message,
+        source: 'website',
+      });
+
+      // 2. Create CRM lead
+      const lead = await createLead({
+        company_id: null,
+        full_name,
+        phone,
+        email: email ?? null,
+        source: 'website',
+        status: 'new',
+        interest: subject || null,
+        budget: 0,
+        preferred_area: null,
+        preferred_room_type: null,
+        interested_area: null,
+        assigned_to: null,
+        notes: message,
+        last_contacted_at: null,
+      });
+
+      // 3. Create initial lead activity
+      await createLeadActivity({
+        lead_id: lead.id,
+        company_id: null,
+        type: 'note',
+        content: 'Lead created from website consultation form',
+        old_status: null,
+        new_status: null,
+        created_by: null,
+        created_by_name: 'Website',
+      });
+
+      setSubmitted(true);
+    } catch (err: any) {
+      setError('Có lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -77,6 +133,13 @@ export default function ContactPage() {
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-5">
                     <h2 className="text-xl font-bold text-slate-800 mb-2">Gửi Tin Nhắn</h2>
+
+                    {error && (
+                      <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" />{error}
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="fullName">Họ và tên *</Label>
