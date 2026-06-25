@@ -220,6 +220,120 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['employee_kpis']['Insert']>;
         Relationships: [];
       };
+      buildings: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          code: string;
+          name: string;
+          area: string;
+          address: string | null;
+          year_built: number | null;
+          total_floors: number;
+          total_rooms: number;
+          description: string | null;
+          image_url: string | null;
+          landlord_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['buildings']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['buildings']['Insert']>;
+        Relationships: [];
+      };
+      landlords: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          address: string | null;
+          notes: string | null;
+          properties_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['landlords']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['landlords']['Insert']>;
+        Relationships: [];
+      };
+      rooms: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          building_id: string | null;
+          code: string;
+          floor: number;
+          room_type: string | null;
+          size: number | null;
+          price: number;
+          status: 'available' | 'rented' | 'maintenance' | 'reserved';
+          bedrooms: number;
+          bathrooms: number;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['rooms']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['rooms']['Insert']>;
+        Relationships: [];
+      };
+      appointments: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          customer_name: string;
+          customer_phone: string | null;
+          customer_email: string | null;
+          room_id: string | null;
+          room_title: string | null;
+          date: string;
+          time: string;
+          area: string | null;
+          status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+          notes: string | null;
+          assigned_to: string | null;
+          assigned_to_name: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['appointments']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['appointments']['Insert']>;
+        Relationships: [];
+      };
+      contract_templates: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          name: string;
+          type: string;
+          content: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['contract_templates']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['contract_templates']['Insert']>;
+        Relationships: [];
+      };
+      employees: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          department: string | null;
+          position: string | null;
+          join_date: string | null;
+          status: 'active' | 'inactive';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['employees']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['employees']['Insert']>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -241,3 +355,9 @@ export type DBNotification = Database['public']['Tables']['notifications']['Row'
 export type DBActivityLog = Database['public']['Tables']['activity_logs']['Row'];
 export type DBRole = Database['public']['Tables']['roles']['Row'];
 export type DBEmployeeKPI = Database['public']['Tables']['employee_kpis']['Row'];
+export type DBBuilding = Database['public']['Tables']['buildings']['Row'];
+export type DBLandlord = Database['public']['Tables']['landlords']['Row'];
+export type DBRoom = Database['public']['Tables']['rooms']['Row'];
+export type DBAppointment = Database['public']['Tables']['appointments']['Row'];
+export type DBContractTemplate = Database['public']['Tables']['contract_templates']['Row'];
+export type DBEmployee = Database['public']['Tables']['employees']['Row'];

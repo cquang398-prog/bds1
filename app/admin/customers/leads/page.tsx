@@ -8,13 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import {
   Plus, Search, UserSearch, Phone, Mail, MapPin,
-  Clock, Edit, Trash2, User, Calendar,
+  Clock, Edit, Trash2, Calendar,
   MessageCircle, PhoneCall, ArrowRightLeft, Video, MessageSquare,
+  Loader2, AlertCircle,
 } from 'lucide-react';
-import { leads as initialLeads, employees } from '@/lib/data/mock-data';
-import { Lead } from '@/types';
+import { useLeads, useLeadDetail } from '@/lib/hooks/useLeads';
+import { useEmployees } from '@/lib/hooks/useEntities';
+import { useAuth } from '@/lib/auth/AuthContext';
+import type { DBLead, DBLeadActivity } from '@/lib/supabase/types';
 
-// ─── New RealHome Business statuses ──────────────────────────────────────────
 const statusConfig: Record<string, { label: string; color: string }> = {
   new:         { label: 'Mới',          color: 'bg-slate-100 text-slate-700' },
   consulting:  { label: 'Đang tư vấn',  color: 'bg-blue-100 text-blue-700' },
@@ -28,33 +30,12 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   lost:        { label: 'Thất bại',     color: 'bg-rose-100 text-rose-700' },
 };
 
-// ─── New RealHome Business sources ───────────────────────────────────────────
 const sourceConfig: Record<string, string> = {
-  website:   'Website',
-  facebook:  'Facebook',
-  tiktok:    'TikTok',
-  zalo:      'Zalo',
-  chotot:    'Chợ Tốt',
-  referral:  'Giới thiệu',
-  cold_call: 'Gọi lạnh',
-  walk_in:   'Trực tiếp',
-  social:    'Mạng xã hội',
-  other:     'Khác',
+  website: 'Website', facebook: 'Facebook', tiktok: 'TikTok', zalo: 'Zalo',
+  chotot: 'Chợ Tốt', referral: 'Giới thiệu', cold_call: 'Gọi lạnh', walk_in: 'Trực tiếp', other: 'Khác',
 };
 
-// ─── Activity types ───────────────────────────────────────────────────────────
-interface LeadActivity {
-  id: string;
-  leadId: string;
-  type: 'call' | 'meeting' | 'zalo' | 'email' | 'note' | 'status_change';
-  content: string;
-  oldStatus?: string;
-  newStatus?: string;
-  createdByName: string;
-  createdAt: string;
-}
-
-const activityTypeConfig: Record<LeadActivity['type'], { label: string; icon: React.ElementType; color: string }> = {
+const activityTypeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   call:          { label: 'Cuộc gọi',       icon: PhoneCall,     color: 'bg-blue-100 text-blue-600' },
   meeting:       { label: 'Gặp mặt',        icon: Calendar,      color: 'bg-green-100 text-green-600' },
   zalo:          { label: 'Zalo',           icon: MessageSquare, color: 'bg-teal-100 text-teal-600' },
@@ -63,129 +44,166 @@ const activityTypeConfig: Record<LeadActivity['type'], { label: string; icon: Re
   status_change: { label: 'Đổi trạng thái', icon: ArrowRightLeft, color: 'bg-amber-100 text-amber-600' },
 };
 
-const mockActivities: LeadActivity[] = [
-  {
-    id: 'la1', leadId: 'ld1', type: 'call',
-    content: 'Gọi điện giới thiệu căn hộ The Metropolitan. Khách hàng quan tâm.',
-    createdByName: 'Nguyễn Thị Hồng', createdAt: '2024-01-10T08:00:00Z',
-  },
-  {
-    id: 'la2', leadId: 'ld1', type: 'status_change',
-    content: 'Chuyển trạng thái từ "Mới" sang "Đang tư vấn"',
-    oldStatus: 'new', newStatus: 'consulting',
-    createdByName: 'Nguyễn Thị Hồng', createdAt: '2024-01-12T10:30:00Z',
-  },
-  {
-    id: 'la3', leadId: 'ld1', type: 'meeting',
-    content: 'Dẫn khách xem căn hộ P-101. Khách rất thích view thành phố.',
-    createdByName: 'Nguyễn Thị Hồng', createdAt: '2024-01-18T14:30:00Z',
-  },
-  {
-    id: 'la4', leadId: 'ld2', type: 'zalo',
-    content: 'Gửi ảnh và thông tin Penthouse Skyline Tower qua Zalo.',
-    createdByName: 'Vũ Thị Thanh', createdAt: '2024-01-09T09:00:00Z',
-  },
-  {
-    id: 'la5', leadId: 'ld2', type: 'call',
-    content: 'Trao đổi chi tiết về hợp đồng và quản lý tòa nhà.',
-    createdByName: 'Vũ Thị Thanh', createdAt: '2024-01-15T14:00:00Z',
-  },
-];
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 const statusOrder = ['new', 'consulting', 'appointment', 'viewed', 'deposited', 'rented', 'cancelled', 'contacted', 'won', 'lost'];
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function LeadDetail({ leadId, onClose, currentUserId, currentUserName }: {
+  leadId: string;
+  onClose: () => void;
+  currentUserId: string;
+  currentUserName: string;
+}) {
+  const { lead, activities, addActivity, changeStatus } = useLeadDetail(leadId);
+  const [newActivityContent, setNewActivityContent] = useState('');
+  const [newActivityType, setNewActivityType] = useState<'call' | 'meeting' | 'zalo' | 'email' | 'note'>('call');
+  const [newStatus, setNewStatus] = useState('');
+
+  if (!lead) return <div className="py-8 text-center text-slate-400"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>;
+
+  const sc = statusConfig[lead.status] ?? statusConfig.new;
+
+  const handleAddActivity = async () => {
+    if (!newActivityContent.trim()) return;
+    await addActivity({
+      lead_id: leadId,
+      company_id: lead.company_id,
+      type: newActivityType,
+      content: newActivityContent,
+      old_status: null,
+      new_status: null,
+      created_by: currentUserId,
+      created_by_name: currentUserName,
+    });
+    setNewActivityContent('');
+  };
+
+  const handleChangeStatus = async () => {
+    if (!newStatus || newStatus === lead.status) return;
+    await changeStatus(newStatus as DBLead['status'], currentUserId, currentUserName);
+    setNewStatus('');
+  };
+
+  return (
+    <div className="space-y-5 pt-2">
+      <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg text-sm">
+        <div className="flex items-center gap-2 text-slate-600"><Phone className="h-4 w-4 text-slate-400" />{lead.phone}</div>
+        <div className="flex items-center gap-2 text-slate-600"><Mail className="h-4 w-4 text-slate-400" />{lead.email ?? '—'}</div>
+        <div className="col-span-2 flex items-center gap-2 flex-wrap">
+          <span className="text-slate-400 text-xs">Trạng thái hiện tại:</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${sc.color}`}>{sc.label}</span>
+        </div>
+        <div className="text-xs text-slate-600"><span className="text-slate-400">Quan tâm:</span> {lead.interest ?? '—'}</div>
+        <div className="text-xs text-slate-600"><span className="text-slate-400">Ngân sách:</span> {lead.budget.toLocaleString('vi-VN')}đ</div>
+        <div className="text-xs text-slate-600"><span className="text-slate-400">Khu vực:</span> {lead.preferred_area ?? '—'}</div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm">
+          <option value="">-- Chuyển trạng thái --</option>
+          {statusOrder.map((s) => <option key={s} value={s}>{statusConfig[s]?.label}</option>)}
+        </select>
+        <Button size="sm" onClick={handleChangeStatus} disabled={!newStatus}>Cập nhật</Button>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="font-semibold text-slate-800 text-sm">Ghi nhận hoạt động</h3>
+        <div className="flex gap-2">
+          <select value={newActivityType} onChange={(e) => setNewActivityType(e.target.value as any)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+            {(['call', 'meeting', 'zalo', 'email', 'note'] as const).map((t) => (
+              <option key={t} value={t}>{activityTypeConfig[t].label}</option>
+            ))}
+          </select>
+          <Input placeholder="Nội dung hoạt động..." value={newActivityContent} onChange={(e) => setNewActivityContent(e.target.value)} className="flex-1" />
+          <Button size="sm" onClick={handleAddActivity} disabled={!newActivityContent.trim()}>Thêm</Button>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-slate-800 text-sm mb-3">Lịch sử hoạt động</h3>
+        <div className="space-y-3">
+          {activities.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-4 bg-slate-50 rounded-lg">Chưa có hoạt động nào</p>
+          )}
+          {activities.map((entry) => {
+            const tc = activityTypeConfig[entry.type] ?? activityTypeConfig.note;
+            const EntryIcon = tc.icon;
+            return (
+              <div key={entry.id} className="flex gap-3">
+                <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${tc.color}`}>
+                  <EntryIcon className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex-1 min-w-0 pb-3 border-b border-dashed last:border-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-slate-600">{tc.label}</span>
+                    <span className="text-xs text-slate-400">· {entry.created_by_name}</span>
+                    <span className="text-xs text-slate-400 flex items-center gap-0.5">
+                      <Clock className="h-3 w-3" />{formatDate(entry.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700 mt-0.5">{entry.content}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LeadsPage() {
-  const [leadList, setLeadList] = useState<Lead[]>(initialLeads);
-  const [activities, setActivities] = useState<LeadActivity[]>(mockActivities);
+  const { company, user, profile } = useAuth();
+  const { leads: leadList, loading, error, add, update, remove } = useLeads(company?.id);
+  const { items: employees } = useEmployees(company?.id);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editItem, setEditItem] = useState<Lead | null>(null);
-  const [newActivityContent, setNewActivityContent] = useState('');
-  const [newActivityType, setNewActivityType] = useState<LeadActivity['type']>('call');
-  const [newStatus, setNewStatus] = useState('');
+  const [editItem, setEditItem] = useState<DBLead | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const filtered = leadList.filter((l) => {
     const matchSearch =
-      l.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      l.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       l.phone.includes(searchQuery) ||
-      l.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      (l.email ?? '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = statusFilter === 'all' || l.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
-  const handleDelete = (id: string) => setLeadList((prev) => prev.filter((l) => l.id !== id));
-
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSaving(true);
     const fd = new FormData(e.currentTarget);
-    const item = {
-      ...(editItem || {}),
-      id: editItem?.id || Date.now().toString(),
-      fullName: fd.get('fullName') as string,
+    const payload = {
+      company_id: company?.id ?? '',
+      full_name: fd.get('fullName') as string,
       phone: fd.get('phone') as string,
-      email: fd.get('email') as string,
-      source: fd.get('source') as Lead['source'],
-      status: fd.get('status') as Lead['status'],
-      interest: fd.get('interest') as string,
+      email: fd.get('email') as string || null,
+      source: fd.get('source') as DBLead['source'],
+      status: fd.get('status') as DBLead['status'],
+      interest: fd.get('interest') as string || null,
       budget: Number(fd.get('budget') || 0),
-      preferredArea: fd.get('preferredArea') as string,
-      preferredRoomType: fd.get('preferredRoomType') as string,
-      assignedTo: fd.get('assignedTo') as string,
-      assignedToName: employees.find((emp) => emp.id === fd.get('assignedTo'))?.name || '',
-      notes: fd.get('notes') as string,
-      createdAt: editItem?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as Lead;
-    setLeadList((prev) => editItem ? prev.map((l) => l.id === editItem.id ? item : l) : [...prev, item]);
+      preferred_area: fd.get('preferredArea') as string || null,
+      preferred_room_type: fd.get('preferredRoomType') as string || null,
+      interested_area: null,
+      assigned_to: fd.get('assignedTo') as string || null,
+      notes: fd.get('notes') as string || null,
+      last_contacted_at: null,
+    };
+    if (editItem) {
+      await update(editItem.id, payload);
+    } else {
+      await add(payload);
+    }
+    setSaving(false);
     setIsFormOpen(false);
     setEditItem(null);
   };
-
-  const addActivity = () => {
-    if (!selectedLead || !newActivityContent.trim()) return;
-    const entry: LeadActivity = {
-      id: Date.now().toString(),
-      leadId: selectedLead.id,
-      type: newActivityType,
-      content: newActivityContent,
-      createdByName: 'Admin',
-      createdAt: new Date().toISOString(),
-    };
-    setActivities((prev) => [entry, ...prev]);
-    setNewActivityContent('');
-  };
-
-  const changeLeadStatus = () => {
-    if (!selectedLead || !newStatus || newStatus === selectedLead.status) return;
-    const entry: LeadActivity = {
-      id: Date.now().toString(),
-      leadId: selectedLead.id,
-      type: 'status_change',
-      content: `Chuyển trạng thái từ "${statusConfig[selectedLead.status]?.label}" sang "${statusConfig[newStatus]?.label}"`,
-      oldStatus: selectedLead.status,
-      newStatus,
-      createdByName: 'Admin',
-      createdAt: new Date().toISOString(),
-    };
-    setActivities((prev) => [entry, ...prev]);
-    setLeadList((prev) =>
-      prev.map((l) => l.id === selectedLead.id ? { ...l, status: newStatus as Lead['status'] } : l)
-    );
-    setSelectedLead((prev) => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
-    setNewStatus('');
-  };
-
-  const leadActivities = activities.filter((a) => a.leadId === selectedLead?.id);
 
   const counts = Object.keys(statusConfig).reduce((acc, s) => {
     acc[s] = leadList.filter((l) => l.status === s).length;
@@ -200,12 +218,16 @@ export default function LeadsPage() {
           <p className="text-slate-500">Quản lý và theo dõi leads bán hàng</p>
         </div>
         <Button onClick={() => { setEditItem(null); setIsFormOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Thêm lead
+          <Plus className="h-4 w-4 mr-2" />Thêm lead
         </Button>
       </div>
 
-      {/* Status pipeline */}
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />{error}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setStatusFilter('all')}
@@ -228,187 +250,100 @@ export default function LeadsPage() {
         <CardHeader>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Tìm theo tên, SĐT hoặc email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Tìm theo tên, SĐT hoặc email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-lg overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm min-w-[750px]">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Khách hàng</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Trạng thái</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Quan tâm</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Phân công</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Nguồn</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Ngân sách</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filtered.map((item) => {
-                  const sc = statusConfig[item.status] || statusConfig['new'];
-                  return (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50 cursor-pointer"
-                      onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('button')) return;
-                        setSelectedLead(item);
-                        setIsDetailOpen(true);
-                      }}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">{item.fullName}</div>
-                        <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                          <Phone className="h-3 w-3" />{item.phone}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${sc.color}`}>
-                          {sc.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        <div className="text-sm">{item.preferredRoomType || '—'}</div>
-                        <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                          <MapPin className="h-3 w-3" />{item.preferredArea || '—'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 text-sm">{item.assignedToName || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs text-slate-500">{sourceConfig[item.source] || item.source}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-700 font-medium">
-                        {item.budget.toLocaleString('vi-VN')}đ
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditItem(item); setIsFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {filtered.length === 0 && (
-              <div className="text-center py-10 text-slate-400">
-                <UserSearch className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p>Không tìm thấy lead nào</p>
-              </div>
-            )}
-          </div>
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+          ) : (
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm min-w-[750px]">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Khách hàng</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Trạng thái</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Quan tâm</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Nguồn</th>
+                    <th className="px-4 py-3 text-right font-medium text-slate-600">Ngân sách</th>
+                    <th className="px-4 py-3 text-right font-medium text-slate-600">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filtered.map((item) => {
+                    const sc = statusConfig[item.status] || statusConfig.new;
+                    return (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50 cursor-pointer"
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setSelectedLeadId(item.id);
+                          setIsDetailOpen(true);
+                        }}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-800">{item.full_name}</div>
+                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
+                            <Phone className="h-3 w-3" />{item.phone}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${sc.color}`}>{sc.label}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          <div className="text-sm">{item.preferred_room_type || '—'}</div>
+                          <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3" />{item.preferred_area || '—'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-500">{sourceConfig[item.source] || item.source}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-700 font-medium">
+                          {item.budget.toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditItem(item); setIsFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); remove(item.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-10 text-slate-400">
+                  <UserSearch className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  <p>Không tìm thấy lead nào</p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Detail / Timeline Dialog */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserSearch className="h-5 w-5" />
-              {selectedLead?.fullName}
+              {leadList.find((l) => l.id === selectedLeadId)?.full_name}
             </DialogTitle>
           </DialogHeader>
-          {selectedLead && (
-            <div className="space-y-5 pt-2">
-              {/* Info */}
-              <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg text-sm">
-                <div className="flex items-center gap-2 text-slate-600"><Phone className="h-4 w-4 text-slate-400" />{selectedLead.phone}</div>
-                <div className="flex items-center gap-2 text-slate-600"><Mail className="h-4 w-4 text-slate-400" />{selectedLead.email || '—'}</div>
-                <div className="col-span-2 flex items-center gap-2 flex-wrap">
-                  <span className="text-slate-400 text-xs">Trạng thái hiện tại:</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${(statusConfig[selectedLead.status] || statusConfig.new).color}`}>
-                    {(statusConfig[selectedLead.status] || statusConfig.new).label}
-                  </span>
-                </div>
-                <div className="text-slate-600 text-xs"><span className="text-slate-400">Quan tâm:</span> {selectedLead.interest || '—'}</div>
-                <div className="text-slate-600 text-xs"><span className="text-slate-400">Ngân sách:</span> {selectedLead.budget.toLocaleString('vi-VN')}đ</div>
-                <div className="text-slate-600 text-xs"><span className="text-slate-400">Khu vực:</span> {selectedLead.preferredArea || '—'}</div>
-                <div className="text-slate-600 text-xs"><span className="text-slate-400">Phân công:</span> {selectedLead.assignedToName || '—'}</div>
-              </div>
-
-              {/* Change status */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">-- Chuyển trạng thái --</option>
-                  {statusOrder.map((s) => (
-                    <option key={s} value={s}>{statusConfig[s]?.label}</option>
-                  ))}
-                </select>
-                <Button size="sm" onClick={changeLeadStatus} disabled={!newStatus}>Cập nhật</Button>
-              </div>
-
-              {/* Add activity */}
-              <div className="space-y-2">
-                <h3 className="font-semibold text-slate-800 text-sm">Ghi nhận hoạt động</h3>
-                <div className="flex gap-2">
-                  <select
-                    value={newActivityType}
-                    onChange={(e) => setNewActivityType(e.target.value as LeadActivity['type'])}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    {(Object.keys(activityTypeConfig) as LeadActivity['type'][]).filter((t) => t !== 'status_change').map((t) => (
-                      <option key={t} value={t}>{activityTypeConfig[t].label}</option>
-                    ))}
-                  </select>
-                  <Input
-                    placeholder="Nội dung hoạt động..."
-                    value={newActivityContent}
-                    onChange={(e) => setNewActivityContent(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button size="sm" onClick={addActivity} disabled={!newActivityContent.trim()}>Thêm</Button>
-                </div>
-              </div>
-
-              {/* Activities timeline */}
-              <div>
-                <h3 className="font-semibold text-slate-800 text-sm mb-3">Lịch sử hoạt động</h3>
-                <div className="space-y-3">
-                  {leadActivities.length === 0 && (
-                    <p className="text-sm text-slate-400 text-center py-4 bg-slate-50 rounded-lg">Chưa có hoạt động nào</p>
-                  )}
-                  {leadActivities.map((entry) => {
-                    const tc = activityTypeConfig[entry.type];
-                    const EntryIcon = tc.icon;
-                    return (
-                      <div key={entry.id} className="flex gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${tc.color}`}>
-                          <EntryIcon className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="flex-1 min-w-0 pb-3 border-b border-dashed last:border-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-slate-600">{tc.label}</span>
-                            <span className="text-xs text-slate-400">· {entry.createdByName}</span>
-                            <span className="text-xs text-slate-400 flex items-center gap-0.5">
-                              <Clock className="h-3 w-3" />{formatDate(entry.createdAt)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 mt-0.5">{entry.content}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+          {selectedLeadId && isDetailOpen && (
+            <LeadDetail
+              leadId={selectedLeadId}
+              onClose={() => setIsDetailOpen(false)}
+              currentUserId={user?.id ?? ''}
+              currentUserName={profile?.full_name ?? 'Admin'}
+            />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -418,7 +353,7 @@ export default function LeadsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label htmlFor="fullName">Họ và tên <span className="text-red-500">*</span></Label>
-                <Input id="fullName" name="fullName" defaultValue={editItem?.fullName} required />
+                <Input id="fullName" name="fullName" defaultValue={editItem?.full_name} required />
               </div>
               <div>
                 <Label htmlFor="phone">Số điện thoại <span className="text-red-500">*</span></Label>
@@ -426,27 +361,23 @@ export default function LeadsPage() {
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" defaultValue={editItem?.email} />
+                <Input id="email" name="email" type="email" defaultValue={editItem?.email ?? ''} />
               </div>
               <div>
                 <Label htmlFor="source">Nguồn lead</Label>
-                <select id="source" name="source" defaultValue={editItem?.source || 'website'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
-                  {Object.entries(sourceConfig).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
+                <select id="source" name="source" defaultValue={editItem?.source ?? 'website'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  {Object.entries(sourceConfig).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
               <div>
                 <Label htmlFor="status">Trạng thái</Label>
-                <select id="status" name="status" defaultValue={editItem?.status || 'new'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
-                  {statusOrder.map((s) => (
-                    <option key={s} value={s}>{statusConfig[s]?.label}</option>
-                  ))}
+                <select id="status" name="status" defaultValue={editItem?.status ?? 'new'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  {statusOrder.map((s) => <option key={s} value={s}>{statusConfig[s]?.label}</option>)}
                 </select>
               </div>
               <div className="col-span-2">
                 <Label htmlFor="interest">Quan tâm</Label>
-                <Input id="interest" name="interest" defaultValue={editItem?.interest} placeholder="Căn hộ 2PN view sông..." />
+                <Input id="interest" name="interest" defaultValue={editItem?.interest ?? ''} placeholder="Căn hộ 2PN view sông..." />
               </div>
               <div>
                 <Label htmlFor="budget">Ngân sách (đ/tháng)</Label>
@@ -454,15 +385,15 @@ export default function LeadsPage() {
               </div>
               <div>
                 <Label htmlFor="preferredArea">Khu vực</Label>
-                <Input id="preferredArea" name="preferredArea" defaultValue={editItem?.preferredArea} />
+                <Input id="preferredArea" name="preferredArea" defaultValue={editItem?.preferred_area ?? ''} />
               </div>
               <div>
                 <Label htmlFor="preferredRoomType">Loại phòng</Label>
-                <Input id="preferredRoomType" name="preferredRoomType" defaultValue={editItem?.preferredRoomType} />
+                <Input id="preferredRoomType" name="preferredRoomType" defaultValue={editItem?.preferred_room_type ?? ''} />
               </div>
               <div>
                 <Label htmlFor="assignedTo">Phân công</Label>
-                <select id="assignedTo" name="assignedTo" defaultValue={editItem?.assignedTo || ''} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                <select id="assignedTo" name="assignedTo" defaultValue={editItem?.assigned_to ?? ''} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                   <option value="">-- Chọn nhân viên --</option>
                   {employees.filter((e) => e.status === 'active').map((e) => (
                     <option key={e.id} value={e.id}>{e.name}</option>
@@ -471,10 +402,12 @@ export default function LeadsPage() {
               </div>
               <div className="col-span-2">
                 <Label htmlFor="notes">Ghi chú</Label>
-                <Input id="notes" name="notes" defaultValue={editItem?.notes} />
+                <Input id="notes" name="notes" defaultValue={editItem?.notes ?? ''} />
               </div>
             </div>
-            <Button type="submit" className="w-full">Lưu</Button>
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Lưu
+            </Button>
           </form>
         </DialogContent>
       </Dialog>
