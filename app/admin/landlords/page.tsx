@@ -43,8 +43,9 @@ export default function LandlordsPage() {
       name: formData.get('name') as string,
       phone: formData.get('phone') as string || null,
       email: formData.get('email') as string || null,
+      code: formData.get('code') as string || null,
       address: formData.get('address') as string || null,
-      properties_count: Number(formData.get('properties_count') || 0),
+      properties_count: editItem?.properties_count || 0,
       notes: formData.get('notes') as string || null,
     };
     if (editItem) {
@@ -83,7 +84,7 @@ export default function LandlordsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" defaultValue={editItem?.email ?? ''} /></div>
-                <div><Label htmlFor="properties_count">Số BĐS</Label><Input id="properties_count" name="properties_count" type="number" defaultValue={editItem?.properties_count ?? 0} /></div>
+                <div><Label htmlFor="code">Mã Chủ Nhà</Label><Input id="code" name="code" defaultValue={editItem?.code ?? ''} placeholder="Ví dụ: DH01" required /></div>
               </div>
               <div><Label htmlFor="address">Địa chỉ</Label><Input id="address" name="address" defaultValue={editItem?.address ?? ''} /></div>
               <div><Label htmlFor="notes">Ghi chú</Label><Input id="notes" name="notes" defaultValue={editItem?.notes ?? ''} /></div>
@@ -116,6 +117,7 @@ export default function LandlordsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Mã</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Họ tên</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Số điện thoại</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Email</th>
@@ -135,6 +137,7 @@ export default function LandlordsPage() {
                           openBuildings(item);
                         }}
                       >
+                        <td className="px-4 py-3 font-mono font-medium text-slate-600">{item.code ?? '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">

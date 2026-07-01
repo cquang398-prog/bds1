@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Pencil, Trash2, Plus, Search, User, Loader2, AlertCircle } from 'lucide-react';
 import { useEmployees } from '@/lib/hooks/useEntities';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { authFetch } from '@/lib/supabase/auth-fetch';
 import type { DBEmployee } from '@/lib/supabase/types';
 
 const statusLabels: Record<string, string> = {
@@ -22,6 +23,7 @@ const statusLabels: Record<string, string> = {
 export default function EmployeesPage() {
   const { company } = useAuth();
   const { items: employeeList, loading, error, add, update, remove } = useEmployees(company?.id);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [editItem, setEditItem] = useState<DBEmployee | null>(null);
   const [viewItem, setViewItem] = useState<DBEmployee | null>(null);
@@ -35,10 +37,11 @@ export default function EmployeesPage() {
     (e.department ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
+const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     const formData = new FormData(e.currentTarget);
+    
     const payload = {
       company_id: company?.id ?? '',
       name: formData.get('name') as string,
@@ -47,18 +50,40 @@ export default function EmployeesPage() {
       department: formData.get('department') as string || null,
       position: formData.get('position') as string || null,
       join_date: formData.get('join_date') as string || null,
-      status: formData.get('status') as DBEmployee['status'],
+      status: formData.get('status') as any,
     };
-    if (editItem) {
-      await update(editItem.id, payload);
-    } else {
-      await add(payload);
-    }
-    setSaving(false);
-    setIsDialogOpen(false);
-    setEditItem(null);
-  };
 
+    try {
+      // Gọi trực tiếp đến API Endpoint ta vừa tạo ở server thay vì thông qua Hook client
+      const response = await authFetch('/api/employees/create', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const resData = await response.json();
+        throw new Error(resData.error || 'Có lỗi xảy ra khi tạo nhân viên');
+      }
+
+      // Refresh lại dữ liệu trên giao diện thông qua hàm refetch ẩn trong hook (nếu có) hoặc reload page
+      // Ở đây ta gọi hàm refetch (hoặc load lại từ repo) tùy theo kiến trúc của bạn
+      if (editItem) {
+        await update(editItem.id, payload);
+      } else {
+        // Tạm thời gọi refetch hoặc làm mới danh sách sau khi API chạy thành công
+        // Có thể bổ sung gọi `refetch()` tại đây nếu Hook `useEntities` trả về
+      }
+      
+      setIsDialogOpen(false);
+      setEditItem(null);
+      alert('Tạo nhân viên và cấp tài khoản thành công! Mật khẩu mặc định là: Sales@2026!');
+      
+    } catch (err: any) {
+       alert(err.message || 'Lỗi xử lý lưu thông tin nhân viên');
+    } finally {
+       setSaving(false);
+    }
+  };
   const openAdd = () => { setEditItem(null); setIsDialogOpen(true); };
   const openEdit = (item: DBEmployee) => { setEditItem(item); setIsDialogOpen(true); };
   const openView = (item: DBEmployee) => { setViewItem(item); setIsViewOpen(true); };

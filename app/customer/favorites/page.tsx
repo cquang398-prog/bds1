@@ -1,20 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { properties } from '@/lib/data/mock-data';
-import { Heart, MapPin, Bed, Bath, Square, Trash2 } from 'lucide-react';
-
-const statusLabels: Record<string, string> = {
-  available: 'Còn trống',
-  rented: 'Đã cho thuê',
-  sold: 'Đã bán',
-  pending: 'Đang chờ',
-};
+import { useCustomerCompany } from '@/components/customer/CustomerCompanyProvider';
+import { usePublicListingsByIds } from '@/lib/hooks/usePublicListings';
+import { LISTING_STATUS_LABELS } from '@/lib/customer/constants';
+import { Heart, MapPin, Bed, Bath, Square, Trash2, Loader2 } from 'lucide-react';
 
 function useFavorites() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
@@ -41,8 +36,13 @@ function useFavorites() {
 }
 
 export default function FavoritesPage() {
+  const { company, companies } = useCustomerCompany();
   const { favorites, remove } = useFavorites();
-  const favoriteProperties = properties.filter((p) => favorites.has(p.id));
+  const favoriteIds = Array.from(favorites);
+  const { listings: favoriteProperties, loading } = usePublicListingsByIds(
+    favoriteIds,
+    useMemo(() => companies.map((c) => c.id), [companies])
+  );
 
   return (
     <div className="container mx-auto px-4 py-10">
@@ -54,7 +54,11 @@ export default function FavoritesPage() {
         </div>
       </div>
 
-      {favoriteProperties.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        </div>
+      ) : favoriteProperties.length === 0 ? (
         <div className="text-center py-20">
           <Heart className="h-16 w-16 text-slate-200 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-slate-600 mb-2">Chưa có bất động sản yêu thích</h2>
@@ -69,15 +73,10 @@ export default function FavoritesPage() {
             <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
               <Link href={`/customer/properties/${property.id}`} className="block">
                 <div className="relative h-48">
-                  <Image
-                    src={property.images[0]}
-                    alt={property.title}
-                    fill
-                    className="object-cover"
-                  />
+                  <Image src={property.imageUrl} alt={property.title} fill className="object-cover" />
                   <div className="absolute top-3 right-3">
                     <Badge variant={property.status === 'available' ? 'default' : 'secondary'}>
-                      {statusLabels[property.status]}
+                      {LISTING_STATUS_LABELS[property.status]}
                     </Badge>
                   </div>
                 </div>

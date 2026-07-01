@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { authFetch } from '../auth-fetch';
 import type { DBCompany } from '../types';
 
 export type CompanyInsert = Omit<DBCompany, 'id' | 'created_at' | 'updated_at'>;
@@ -23,14 +24,20 @@ export async function getCompany(id: string): Promise<DBCompany | null> {
   return data as unknown as DBCompany | null;
 }
 
+// ĐÃ SỬA: Chuyển từ gọi Supabase client sang gọi API Server của Next.js
 export async function createCompany(company: CompanyInsert): Promise<DBCompany> {
-  const { data, error } = await supabase
-    .from('companies')
-    .insert(company as any)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as unknown as DBCompany;
+  const response = await authFetch('/api/companies/create', {
+    method: 'POST',
+    body: JSON.stringify(company),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Đã xảy ra lỗi khi tạo công ty và tài khoản');
+  }
+
+  const data = await response.json();
+  return data as DBCompany;
 }
 
 export async function updateCompany(id: string, updates: CompanyUpdate): Promise<DBCompany> {

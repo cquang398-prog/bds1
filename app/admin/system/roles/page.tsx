@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Shield, Edit, Trash2, Search, Check, Lock } from 'lucide-react';
-import { roles as initialRoles } from '@/lib/data/mock-data';
-import { Role } from '@/types';
+import { Plus, Shield, Edit, Trash2, Search, Check, Lock, Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/lib/auth/AuthContext';
+import { supabase } from '@/lib/supabase/client';
+import type { DBRole } from '@/lib/supabase/types';
 
 const ALL_PERMISSIONS: { group: string; items: { key: string; label: string }[] }[] = [
   {
@@ -60,20 +61,65 @@ const ALL_PERMISSIONS: { group: string; items: { key: string; label: string }[] 
 ];
 
 export default function RolesPage() {
-  const [roleList, setRoleList] = useState<Role[]>(initialRoles);
+  const { company } = useAuth();
+  const [roleList, setRoleList] = useState<DBRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [editItem, setEditItem] = useState<Role | null>(null);
-  const [viewItem, setViewItem] = useState<Role | null>(null);
+  const [editItem, setEditItem] = useState<DBRole | null>(null);
+  const [viewItem, setViewItem] = useState<DBRole | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
 
+  const fetchRoles = async () => {
+    if (!company?.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('roles')
+        .select('*')
+        .eq('company_id', company.id)
+        .order('name', { ascending: true });
+
+      if (fetchError) throw fetchError;
+      setRoleList(data ?? []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRoles();
+  }, [company?.id]);
+
   const filtered = roleList.filter((r) =>
     r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (r.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleDelete = (id: string) => setRoleList((prev) => prev.filter((r) => r.id !== id));
+  const handleDelete = async (id: string, isSystem: boolean) => {
+    if (isSystem) {
+      alert('Không thể xóa vai trò hệ thống');
+      return;
+    }
+    if (!confirm('Bạn có chắc muốn xóa vai trò này?')) return;
+    try {
+      const { error: deleteError } = await supabase
+        .from('roles')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+      await fetchRoles();
+    } catch (e: any) {
+      alert(e.message || 'Lỗi khi xóa vai trò');
+    }
+  };
 
   const openAdd = () => {
     setEditItem(null);
@@ -81,13 +127,13 @@ export default function RolesPage() {
     setIsFormOpen(true);
   };
 
-  const openEdit = (item: Role) => {
+  const openEdit = (item: DBRole) => {
     setEditItem(item);
     setSelectedPerms(item.permissions.includes('*') ? ['*'] : [...item.permissions]);
     setIsFormOpen(true);
   };
 
-  const openView = (item: Role) => { setViewItem(item); setIsViewOpen(true); };
+  const openView = (item: DBRole) => { setViewItem(item); setIsViewOpen(true); };
 
   const togglePerm = (key: string) => {
     setSelectedPerms((prev) =>
@@ -95,21 +141,52 @@ export default function RolesPage() {
     );
   };
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!company?.id) return;
+    setSaving(true);
     const fd = new FormData(e.currentTarget);
-    const item: Role = {
-      id: editItem?.id || Date.now().toString(),
-      name: fd.get('name') as string,
-      description: fd.get('description') as string,
-      permissions: selectedPerms,
-      isSystem: editItem?.isSystem || false,
-      usersCount: editItem?.usersCount || 0,
-      createdAt: editItem?.createdAt || new Date().toISOString().split('T')[0],
-    };
-    setRoleList((prev) => editItem ? prev.map((r) => r.id === editItem.id ? item : r) : [...prev, item]);
-    setIsFormOpen(false);
-    setEditItem(null);
+    const name = fd.get('name') as string;
+    const description = fd.get('description') as string;
+    const permissions = selectedPerms;
+
+    try {
+      if (editItem) {
+        if (editItem.is_system) throw new Error('Không thể chỉnh sửa vai trò hệ thống');
+
+        const { error: updateError } = await supabase
+          .from('roles')
+          .update({
+            name,
+            description,
+            permissions,
+          })
+          .eq('id', editItem.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('roles')
+          .insert({
+            company_id: company.id,
+            name,
+            description,
+            permissions,
+            is_system: false,
+            users_count: 0,
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchRoles();
+      setIsFormOpen(false);
+      setEditItem(null);
+    } catch (e: any) {
+      alert(e.message || 'Lỗi lưu vai trò');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -125,6 +202,12 @@ export default function RolesPage() {
         </Button>
       </div>
 
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />{error}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="relative">
@@ -138,52 +221,61 @@ export default function RolesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3">
-            {filtered.map((item) => {
-              const isSuperAdmin = item.permissions.includes('*');
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-start justify-between p-4 border rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                  onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; openView(item); }}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${item.isSystem ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                      {item.isSystem ? <Lock className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-800">{item.name}</span>
-                        {item.isSystem && (
-                          <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Hệ thống</span>
-                        )}
-                        <span className="text-xs text-slate-400">{item.usersCount} người dùng</span>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {filtered.map((item) => {
+                const isSuperAdmin = item.permissions.includes('*');
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-start justify-between p-4 border rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; openView(item); }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${item.is_system ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        {item.is_system ? <Lock className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
                       </div>
-                      <p className="text-sm text-slate-500 mt-0.5">{item.description}</p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {isSuperAdmin ? (
-                          <span className="text-xs bg-slate-800 text-white px-2 py-0.5 rounded">Toàn quyền</span>
-                        ) : (
-                          item.permissions.slice(0, 5).map((p) => (
-                            <span key={p} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{p}</span>
-                          ))
-                        )}
-                        {!isSuperAdmin && item.permissions.length > 5 && (
-                          <span className="text-xs text-slate-400">+{item.permissions.length - 5} quyền khác</span>
-                        )}
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-800">{item.name}</span>
+                          {item.is_system && (
+                            <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Hệ thống</span>
+                          )}
+                          <span className="text-xs text-slate-400">{item.users_count} người dùng</span>
+                        </div>
+                        <p className="text-sm text-slate-500 mt-0.5">{item.description}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {isSuperAdmin ? (
+                            <span className="text-xs bg-slate-800 text-white px-2 py-0.5 rounded">Toàn quyền</span>
+                          ) : (
+                            item.permissions.slice(0, 5).map((p) => (
+                              <span key={p} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{p}</span>
+                            ))
+                          )}
+                          {!isSuperAdmin && item.permissions.length > 5 && (
+                            <span className="text-xs text-slate-400">+{item.permissions.length - 5} quyền khác</span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {!item.is_system && (
+                      <div className="flex items-center gap-1 ml-4">
+                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.is_system); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      </div>
+                    )}
                   </div>
-                  {!item.isSystem && (
-                    <div className="flex items-center gap-1 ml-4">
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className="text-slate-500 text-center py-4">Không tìm thấy vai trò nào</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -237,7 +329,7 @@ export default function RolesPage() {
             </div>
             <div>
               <Label htmlFor="description">Mô tả</Label>
-              <Input id="description" name="description" defaultValue={editItem?.description} />
+              <Input id="description" name="description" defaultValue={editItem?.description ?? ''} />
             </div>
 
             <div>
@@ -263,7 +355,10 @@ export default function RolesPage() {
                 ))}
               </div>
             </div>
-            <Button type="submit" className="w-full">Lưu</Button>
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />}
+              Lưu
+            </Button>
           </form>
         </DialogContent>
       </Dialog>

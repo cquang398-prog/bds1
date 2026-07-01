@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CheckCircle2, MessageSquare, Building2, Banknote, UserCircle, AlertCircle } from 'lucide-react';
 import { createConsultation } from '@/lib/supabase/repositories/consultations';
 import { createLead, createLeadActivity } from '@/lib/supabase/repositories/leads';
+import { useCustomerCompany } from '@/components/customer/CustomerCompanyProvider';
 
 const sources = [
   { value: 'website', label: 'Website' },
@@ -47,6 +48,7 @@ const sourceToLeadSource: Record<string, LeadSource> = {
 };
 
 export default function RequestConsultationPage() {
+  const { company } = useCustomerCompany();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +75,15 @@ export default function RequestConsultationPage() {
       notes,
     ].filter(Boolean).join('. ') || 'Yêu cầu tư vấn bất động sản';
 
+    if (!company?.id) {
+      setError('Không xác định được công ty. Vui lòng tải lại trang.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 1. Create consultation record
-      const consultation = await createConsultation({
+      await createConsultation({
+        company_id: company.id,
         full_name,
         phone,
         email,
@@ -83,10 +91,9 @@ export default function RequestConsultationPage() {
         source: 'website',
       });
 
-      // 2. Create CRM lead
       const leadSource: LeadSource = sourceToLeadSource[sourceValue] ?? 'website';
       const lead = await createLead({
-        company_id: null,
+        company_id: company.id,
         full_name,
         phone,
         email: email ?? null,
@@ -102,12 +109,11 @@ export default function RequestConsultationPage() {
         last_contacted_at: null,
       });
 
-      // 3. Create initial lead activity
       await createLeadActivity({
         lead_id: lead.id,
-        company_id: null,
+        company_id: company.id,
         type: 'note',
-        content: 'Lead created from website consultation form',
+        content: 'Lead tạo từ form yêu cầu tư vấn website',
         old_status: null,
         new_status: null,
         created_by: null,

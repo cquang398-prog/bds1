@@ -4,89 +4,132 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
   Plus, Search, Building2, Edit, Trash2, Lock, Unlock,
-  Users, MapPin, Mail, Phone, Eye,
+  Users, MapPin, Mail, Phone, Eye, Loader2,
 } from 'lucide-react';
-import { companies as initialCompanies } from '@/lib/data/mock-data';
-import { Company } from '@/types';
+import { useCompanies } from '@/lib/hooks/useCompanies';
+import { toast } from 'sonner';
 
-const planConfig: Record<Company['plan'], { label: string; color: string }> = {
+const planConfig: Record<string, { label: string; color: string }> = {
   starter:      { label: 'Starter',      color: 'bg-slate-100 text-slate-700' },
   professional: { label: 'Professional', color: 'bg-blue-100 text-blue-700' },
   enterprise:   { label: 'Enterprise',   color: 'bg-amber-100 text-amber-700' },
 };
 
-const statusConfig: Record<Company['status'], { label: string; color: string }> = {
+const statusConfig: Record<string, { label: string; color: string }> = {
   active:    { label: 'Hoạt động', color: 'bg-green-100 text-green-700' },
   trial:     { label: 'Dùng thử',  color: 'bg-amber-100 text-amber-700' },
   suspended: { label: 'Tạm khóa', color: 'bg-red-100 text-red-700' },
 };
 
+// Đã fix lỗi Invalid Date: Kiểm tra dữ liệu an toàn trước khi format
 function formatDate(s: string) {
-  return new Date(s).toLocaleDateString('vi-VN');
+  if (!s) return '---';
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '---' : d.toLocaleDateString('vi-VN');
 }
 
 export default function SuperAdminCompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>(initialCompanies);
+  const { companies, loading, error, add, update, remove } = useCompanies();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [planFilter, setPlanFilter] = useState<string>('all');
-  const [editItem, setEditItem] = useState<Company | null>(null);
-  const [viewItem, setViewItem] = useState<Company | null>(null);
+  const [editItem, setEditItem] = useState<any | null>(null);
+  const [viewItem, setViewItem] = useState<any | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const filtered = companies.filter((c) => {
+  const filtered = companies.filter((c: any) => {
     const matchSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.ownerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.ownerName.toLowerCase().includes(searchQuery.toLowerCase());
+      (c.name && c.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.owner_email && c.owner_email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.owner_name && c.owner_name.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchPlan = planFilter === 'all' || c.plan === planFilter;
     return matchSearch && matchPlan;
   });
 
-  const toggleStatus = (id: string) => {
-    setCompanies((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, status: c.status === 'active' ? 'suspended' : 'active' }
-          : c
-      )
-    );
+  const toggleStatus = async (id: string) => {
+    const target = companies.find((c: any) => c.id === id);
+    if (target) {
+      await update(id, { status: target.status === 'active' ? 'suspended' : 'active' });
+    }
   };
 
-  const handleDelete = (id: string) => setCompanies((prev) => prev.filter((c) => c.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc muốn xóa công ty này?')) {
+      await remove(id);
+    }
+  };
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  // Tạo mới: gọi /api/onboarding/invite (sinh token + gửi email)
+  // Chỉnh sửa: vẫn dùng hook update() bình thường
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const item: Company = {
-      id: editItem?.id || Date.now().toString(),
-      name: fd.get('name') as string,
-      domain: fd.get('domain') as string,
-      plan: fd.get('plan') as Company['plan'],
-      status: fd.get('status') as Company['status'],
-      ownerName: fd.get('ownerName') as string,
-      ownerEmail: fd.get('ownerEmail') as string,
-      phone: fd.get('phone') as string,
-      address: fd.get('address') as string,
-      totalUsers: editItem?.totalUsers || 1,
-      totalProperties: editItem?.totalProperties || 0,
-      createdAt: editItem?.createdAt || new Date().toISOString().split('T')[0],
-    };
-    setCompanies((prev) =>
-      editItem ? prev.map((c) => c.id === editItem.id ? item : c) : [...prev, item]
-    );
+
+    const name        = fd.get('name') as string;
+    const domain      = fd.get('domain') as string;
+    const plan        = fd.get('plan') as string;
+    const status      = fd.get('status') as string;
+    const owner_name  = fd.get('ownerName') as string;
+    const owner_email = fd.get('ownerEmail') as string;
+    const phone       = fd.get('phone') as string;
+    const address     = fd.get('address') as string;
+
+    setSubmitting(true);
+    try {
+      if (editItem) {
+        // --- Chỉnh sửa công ty hiện có ---
+        await update(editItem.id, {
+          name, domain,
+          plan: plan as any,
+          status: status as any,
+          owner_name, owner_email, phone, address,
+          total_users: editItem.total_users || 0,
+          total_properties: editItem.total_properties || 0,
+          trial_ends_at: editItem.trial_ends_at || null,
+        });
+        toast.success('Cập nhật công ty thành công!');
+      } else {
+        // --- Tạo công ty mới qua Onboarding Invite API ---
+        const res = await fetch('/api/onboarding/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, domain, plan, owner_name, owner_email, phone, address, status: 'pending' }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Không thể tạo công ty');
+        }
+
+        if (data.emailSent) {
+          toast.success('Đã khởi tạo công ty và gửi email kích hoạt tài khoản!');
+        } else {
+          toast.success('Công ty đã được tạo! Lưu ý: email kích hoạt chưa gửi được.', {
+            description: data.emailError || 'Kiểm tra lại cấu hình RESEND_API_KEY',
+          });
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      return;
+    } finally {
+      setSubmitting(false);
+    }
+
     setIsFormOpen(false);
     setEditItem(null);
   };
 
   const openAdd = () => { setEditItem(null); setIsFormOpen(true); };
-  const openEdit = (item: Company) => { setEditItem(item); setIsFormOpen(true); };
-  const openView = (item: Company) => { setViewItem(item); setIsViewOpen(true); };
+  const openEdit = (item: any) => { setEditItem(item); setIsFormOpen(true); };
+  const openView = (item: any) => { setViewItem(item); setIsViewOpen(true); };
 
   return (
     <div className="space-y-6">
@@ -101,7 +144,6 @@ export default function SuperAdminCompaniesPage() {
         </Button>
       </div>
 
-      {/* Plan filter */}
       <div className="flex flex-wrap gap-2">
         {['all', 'starter', 'professional', 'enterprise'].map((p) => (
           <button
@@ -109,7 +151,7 @@ export default function SuperAdminCompaniesPage() {
             onClick={() => setPlanFilter(p)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${planFilter === p ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
           >
-            {p === 'all' ? `Tất cả (${companies.length})` : planConfig[p as Company['plan']].label}
+            {p === 'all' ? `Tất cả (${companies.length})` : planConfig[p]?.label}
           </button>
         ))}
       </div>
@@ -127,6 +169,9 @@ export default function SuperAdminCompaniesPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {loading ? (
+             <div className="text-center py-10 text-slate-500">Đang tải dữ liệu...</div>
+          ) : (
           <div className="border rounded-lg overflow-hidden overflow-x-auto">
             <table className="w-full text-sm min-w-[700px]">
               <thead className="bg-slate-50">
@@ -141,9 +186,9 @@ export default function SuperAdminCompaniesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filtered.map((item) => {
-                  const pc = planConfig[item.plan];
-                  const sc = statusConfig[item.status];
+                {filtered.map((item: any) => {
+                  const pc = planConfig[item.plan] || planConfig['starter'];
+                  const sc = statusConfig[item.status] || statusConfig['trial'];
                   return (
                     <tr
                       key={item.id}
@@ -162,8 +207,8 @@ export default function SuperAdminCompaniesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-slate-700">{item.ownerName}</div>
-                        <div className="text-xs text-slate-400">{item.ownerEmail}</div>
+                        <div className="text-slate-700">{item.owner_name}</div>
+                        <div className="text-xs text-slate-400">{item.owner_email}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pc.color}`}>{pc.label}</span>
@@ -174,10 +219,10 @@ export default function SuperAdminCompaniesPage() {
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <Users className="h-3.5 w-3.5 text-slate-400" />
-                          <span className="text-slate-700 font-medium">{item.totalUsers}</span>
+                          <span className="text-slate-700 font-medium">{item.total_users || 0}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{formatDate(item.createdAt)}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{formatDate(item.created_at)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" title="Xem chi tiết" onClick={(e) => { e.stopPropagation(); openView(item); }}><Eye className="h-4 w-4" /></Button>
@@ -207,10 +252,10 @@ export default function SuperAdminCompaniesPage() {
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* View Detail Dialog */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -222,22 +267,22 @@ export default function SuperAdminCompaniesPage() {
           {viewItem && (
             <div className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg text-sm">
-                <div className="flex items-center gap-2 text-slate-600"><Mail className="h-4 w-4 text-slate-400" />{viewItem.ownerEmail}</div>
+                <div className="flex items-center gap-2 text-slate-600"><Mail className="h-4 w-4 text-slate-400" />{viewItem.owner_email}</div>
                 <div className="flex items-center gap-2 text-slate-600"><Phone className="h-4 w-4 text-slate-400" />{viewItem.phone}</div>
                 <div className="col-span-2 flex items-center gap-2 text-slate-600"><MapPin className="h-4 w-4 text-slate-400" />{viewItem.address}</div>
               </div>
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-400 mb-1">Gói</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${planConfig[viewItem.plan].color}`}>{planConfig[viewItem.plan].label}</span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${planConfig[viewItem.plan]?.color}`}>{planConfig[viewItem.plan]?.label}</span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-400 mb-1">Trạng thái</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusConfig[viewItem.status].color}`}>{statusConfig[viewItem.status].label}</span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusConfig[viewItem.status]?.color}`}>{statusConfig[viewItem.status]?.label}</span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-400 mb-1">Users</p>
-                  <p className="font-bold text-slate-800">{viewItem.totalUsers}</p>
+                  <p className="font-bold text-slate-800">{viewItem.total_users || 0}</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -262,7 +307,6 @@ export default function SuperAdminCompaniesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -284,11 +328,11 @@ export default function SuperAdminCompaniesPage() {
               </div>
               <div>
                 <Label htmlFor="ownerName">Chủ sở hữu</Label>
-                <Input id="ownerName" name="ownerName" defaultValue={editItem?.ownerName} required />
+                <Input id="ownerName" name="ownerName" defaultValue={editItem?.owner_name} required />
               </div>
               <div>
                 <Label htmlFor="ownerEmail">Email</Label>
-                <Input id="ownerEmail" name="ownerEmail" type="email" defaultValue={editItem?.ownerEmail} required />
+                <Input id="ownerEmail" name="ownerEmail" type="email" defaultValue={editItem?.owner_email} required />
               </div>
               <div>
                 <Label htmlFor="plan">Gói dịch vụ</Label>
@@ -300,9 +344,8 @@ export default function SuperAdminCompaniesPage() {
               </div>
               <div>
                 <Label htmlFor="status">Trạng thái</Label>
-                <select id="status" name="status" defaultValue={editItem?.status || 'trial'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                <select id="status" name="status" defaultValue={editItem?.status || 'active'} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                   <option value="active">Hoạt động</option>
-                  <option value="trial">Dùng thử</option>
                   <option value="suspended">Tạm khóa</option>
                 </select>
               </div>
@@ -311,7 +354,13 @@ export default function SuperAdminCompaniesPage() {
                 <Input id="address" name="address" defaultValue={editItem?.address} />
               </div>
             </div>
-            <Button type="submit" className="w-full">Lưu</Button>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Đang xử lý...</>
+              ) : (
+                editItem ? 'Lưu thay đổi' : 'Khởi tạo công ty & Gửi email'
+              )}
+            </Button>
           </form>
         </DialogContent>
       </Dialog>

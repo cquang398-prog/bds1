@@ -52,15 +52,15 @@ export function CustomerFooter() {
             <ul className="space-y-3">
               <li className="flex items-center gap-2 text-sm text-slate-600">
                 <MapPin className="h-4 w-4" />
-                123 Đường Bất Động Sản, Quận 1, TP.HCM
+                113 Yên Hòa, Cầu Giấy, Hà Nội
               </li>
               <li className="flex items-center gap-2 text-sm text-slate-600">
                 <Phone className="h-4 w-4" />
-                (028) 1234-5678
+                0857.844.999
               </li>
               <li className="flex items-center gap-2 text-sm text-slate-600">
                 <Mail className="h-4 w-4" />
-                info@estatepro.vn
+                realhomesupport@gmail.com
               </li>
             </ul>
           </div>

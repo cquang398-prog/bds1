@@ -6,28 +6,34 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { properties } from '@/lib/data/mock-data';
-import { MapPin, Bed, Bath, Square, Calendar, Phone, ChevronLeft, ChevronRight, Check, Map, ExternalLink } from 'lucide-react';
-
-const statusLabels: Record<string, string> = {
-  available: 'Còn trống',
-  rented: 'Đã cho thuê',
-  sold: 'Đã bán',
-  pending: 'Đang chờ',
-};
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ViewingRequestDialog } from '@/components/customer/ViewingRequestDialog';
+import { useCustomerCompany } from '@/components/customer/CustomerCompanyProvider';
+import { usePublicListing } from '@/lib/hooks/usePublicListings';
+import { LISTING_STATUS_LABELS } from '@/lib/customer/constants';
+import { MapPin, Bed, Bath, Square, Calendar, Phone, Map, ExternalLink, Loader2 } from 'lucide-react';
 
 export default function PropertyDetailPage() {
   const params = useParams();
-  const property = properties.find((p) => p.id === params.id);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [bookingForm, setBookingForm] = useState({ name: '', phone: '', date: '', time: '' });
+  const id = params.id as string;
+  const { company } = useCustomerCompany();
+  const { listing: property, loading, error } = usePublicListing(id, company?.id);
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const [isViewingOpen, setIsViewingOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
 
-  if (!property) {
+  const hotline = company?.phone || '(028) 1234-5678';
+  const hotlineHref = company?.phone ? `tel:${company.phone.replace(/\D/g, '')}` : 'tel:02812345678';
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-16 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (!property || error) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-slate-800">Không tìm thấy bất động sản</h1>
@@ -35,60 +41,18 @@ export default function PropertyDetailPage() {
     );
   }
 
-  const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % property.images.length);
-  };
-
-  const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length);
-  };
-
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Image Gallery */}
       <div className="relative h-[400px] md:h-[500px] rounded-xl overflow-hidden mb-8">
-        <Image
-          src={property.images[currentImageIndex]}
-          alt={property.title}
-          fill
-          className="object-cover"
-        />
-        {property.images.length > 1 && (
-          <>
-            <button
-              onClick={prevImage}
-              className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-            <button
-              onClick={nextImage}
-              className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          </>
-        )}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-          {property.images.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentImageIndex(idx)}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                idx === currentImageIndex ? 'bg-white' : 'bg-white/50'
-              }`}
-            />
-          ))}
-        </div>
+        <Image src={property.imageUrl} alt={property.title} fill className="object-cover" priority />
         <div className="absolute top-4 right-4">
           <Badge variant={property.status === 'available' ? 'default' : 'secondary'} className="text-sm px-3 py-1">
-            {statusLabels[property.status]}
+            {LISTING_STATUS_LABELS[property.status]}
           </Badge>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           <div>
             <h1 className="text-3xl font-bold text-slate-800">{property.title}</h1>
@@ -120,13 +84,15 @@ export default function PropertyDetailPage() {
                 <div className="text-sm text-slate-500">Diện tích</div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-slate-500" />
-              <div>
-                <div className="font-semibold">{property.yearBuilt}</div>
-                <div className="text-sm text-slate-500">Năm xây dựng</div>
+            {property.yearBuilt && (
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-slate-500" />
+                <div>
+                  <div className="font-semibold">{property.yearBuilt}</div>
+                  <div className="text-sm text-slate-500">Năm xây dựng</div>
+                </div>
               </div>
-            </div>
+            )}
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-slate-500" />
               <div>
@@ -139,18 +105,6 @@ export default function PropertyDetailPage() {
           <div>
             <h2 className="text-xl font-semibold text-slate-800 mb-3">Mô tả</h2>
             <p className="text-slate-600 leading-relaxed">{property.description}</p>
-          </div>
-
-          <div>
-            <h2 className="text-xl font-semibold text-slate-800 mb-3">Tiện ích</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {property.amenities.map((amenity) => (
-                <div key={amenity} className="flex items-center gap-2 text-slate-600">
-                  <Check className="h-4 w-4 text-green-600" />
-                  {amenity}
-                </div>
-              ))}
-            </div>
           </div>
 
           <Card>
@@ -174,7 +128,6 @@ export default function PropertyDetailPage() {
           </Card>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
           <Card>
             <CardContent className="p-6">
@@ -182,93 +135,15 @@ export default function PropertyDetailPage() {
                 {property.price.toLocaleString('vi-VN')}đ/tháng
               </div>
               <div className="space-y-3">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button className="w-full" size="lg">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Đặt Lịch Hẹn
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle>Đặt Lịch Hẹn Xem</DialogTitle>
-                    </DialogHeader>
-                    <div className="pt-2 pb-1">
-                      <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 mb-4">
-                        <p className="text-xs text-slate-500 mb-1">Bất động sản đang xem:</p>
-                        <p className="font-semibold text-sm text-slate-900">{property.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{property.address}</p>
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="book-name">Họ và tên</Label>
-                          <Input
-                            id="book-name"
-                            value={bookingForm.name}
-                            onChange={(e) => setBookingForm({ ...bookingForm, name: e.target.value })}
-                            placeholder="Họ tên của bạn"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="book-phone">Số điện thoại</Label>
-                          <Input
-                            id="book-phone"
-                            value={bookingForm.phone}
-                            onChange={(e) => setBookingForm({ ...bookingForm, phone: e.target.value })}
-                            placeholder="Số điện thoại của bạn"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="book-date">Ngày đi xem</Label>
-                          <Input
-                            id="book-date"
-                            type="date"
-                            value={bookingForm.date}
-                            onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="book-time">Giờ đi xem</Label>
-                          <Input
-                            id="book-time"
-                            type="time"
-                            value={bookingForm.time}
-                            onChange={(e) => setBookingForm({ ...bookingForm, time: e.target.value })}
-                          />
-                        </div>
-                        <Button className="w-full">Gửi yêu cầu</Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <Button className="w-full" size="lg" disabled={!company} onClick={() => setIsViewingOpen(true)}>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Đặt Lịch Hẹn
+                </Button>
+                <Button variant="outline" className="w-full" size="lg" onClick={() => setIsContactOpen(true)}>
+                  <Phone className="h-4 w-4 mr-2" />
+                  Liên Hệ Môi Giới
+                </Button>
 
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full" size="lg">
-                      <Phone className="h-4 w-4 mr-2" />
-                      Liên Hệ Môi Giới
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle>Liên Hệ Môi Giới</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-6 pt-4 text-center">
-                      <div className="flex items-center justify-center gap-3">
-                        <Phone className="h-5 w-5 text-slate-600" />
-                        <span className="text-lg font-medium">(028) 1234-5678</span>
-                      </div>
-                      <Button className="w-full" size="lg" asChild>
-                        <a href="tel:02812345678">
-                          <Phone className="h-4 w-4 mr-2" />
-                          Gọi ngay
-                        </a>
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                {/* Map Preview */}
                 <div
                   className="mt-1 rounded-xl overflow-hidden border border-slate-200 cursor-pointer group relative"
                   onClick={() => setIsMapOpen(true)}
@@ -297,7 +172,6 @@ export default function PropertyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Fullscreen Map Modal */}
           <Dialog open={isMapOpen} onOpenChange={setIsMapOpen}>
             <DialogContent className="max-w-3xl p-0 overflow-hidden">
               <DialogHeader className="px-6 pt-5 pb-3">
@@ -333,6 +207,40 @@ export default function PropertyDetailPage() {
           </Dialog>
         </div>
       </div>
+
+      <Dialog open={isContactOpen} onOpenChange={setIsContactOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Liên Hệ Môi Giới</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 pt-4 text-center">
+            <div className="flex items-center justify-center gap-3">
+              <Phone className="h-5 w-5 text-slate-600" />
+              <span className="text-lg font-medium">{hotline}</span>
+            </div>
+            <Button className="w-full" size="lg" asChild>
+              <a href={hotlineHref}>
+                <Phone className="h-4 w-4 mr-2" />
+                Gọi ngay
+              </a>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {company && (
+        <ViewingRequestDialog
+          open={isViewingOpen}
+          onOpenChange={setIsViewingOpen}
+          companyId={company.id}
+          property={{
+            id: property.id,
+            title: property.title,
+            address: property.address,
+            area: property.area,
+          }}
+        />
+      )}
     </div>
   );
 }

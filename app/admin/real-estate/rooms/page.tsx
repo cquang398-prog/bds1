@@ -43,6 +43,7 @@ export default function RoomsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [displayPrice, setDisplayPrice] = useState('');
 
   const filtered = roomList.filter((r) => {
     const buildingName = r.buildings?.name ?? '';
@@ -80,8 +81,14 @@ export default function RoomsPage() {
     setEditItem(null);
   };
 
-  const openAdd = () => { setEditItem(null); setIsDialogOpen(true); };
-  const openEdit = (item: RoomWithBuilding) => { setEditItem(item); setIsDialogOpen(true); };
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\D/g, '');
+    if (!rawValue) { setDisplayPrice(''); return; }
+    setDisplayPrice(Number(rawValue).toLocaleString('vi-VN'));
+  };
+
+  const openAdd = () => { setEditItem(null); setDisplayPrice(''); setIsDialogOpen(true); };
+  const openEdit = (item: RoomWithBuilding) => { setEditItem(item); setDisplayPrice(item.price ? item.price.toLocaleString('vi-VN') : ''); setIsDialogOpen(true); };
   const openView = (item: RoomWithBuilding) => { setViewItem(item); setIsViewOpen(true); };
 
   return (
@@ -127,7 +134,19 @@ export default function RoomsPage() {
                 <div><Label htmlFor="size">Diện tích (m²)</Label><Input id="size" name="size" type="number" defaultValue={editItem?.size ?? ''} /></div>
               </div>
               <div className="grid grid-cols-3 gap-4">
-                <div><Label htmlFor="price">Giá (đ)</Label><Input id="price" name="price" type="number" defaultValue={editItem?.price} required /></div>
+                <div>
+                  <Label htmlFor="price">Giá (đ)</Label>
+                  <Input
+                    id="price"
+                    type="text"
+                    inputMode="numeric"
+                    value={displayPrice}
+                    onChange={handlePriceChange}
+                    placeholder="0"
+                    required
+                  />
+                  <input type="hidden" name="price" value={displayPrice.replace(/\./g, '')} />
+                </div>
                 <div><Label htmlFor="bedrooms">Phòng ngủ</Label><Input id="bedrooms" name="bedrooms" type="number" defaultValue={editItem?.bedrooms} required /></div>
                 <div><Label htmlFor="bathrooms">Phòng tắm</Label><Input id="bathrooms" name="bathrooms" type="number" defaultValue={editItem?.bathrooms} required /></div>
               </div>

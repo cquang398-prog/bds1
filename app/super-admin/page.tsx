@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Users, CreditCard, TrendingUp, Activity, Package } from 'lucide-react';
-import { companies as mockCompanies } from '@/lib/data/mock-data';
+import { Building2, Users, CreditCard, TrendingUp, Activity, Package, Loader2 } from 'lucide-react';
+import { useCompanies } from '@/lib/hooks/useCompanies';
 import Link from 'next/link';
 
 export default function SuperAdminDashboard() {
-  const [companies] = useState(mockCompanies);
+  const { companies, loading } = useCompanies();
 
   const stats = [
     {
@@ -15,7 +14,7 @@ export default function SuperAdminDashboard() {
       value: companies.length,
       icon: Building2,
       color: 'bg-blue-50 text-blue-600',
-      change: '+2 tháng này',
+      change: 'Cập nhật từ DB',
       href: '/super-admin/companies',
     },
     {
@@ -31,12 +30,12 @@ export default function SuperAdminDashboard() {
       value: companies.filter((c) => c.status === 'trial').length,
       icon: Package,
       color: 'bg-amber-50 text-amber-600',
-      change: 'Cần theo dõi',
+      change: '',
       href: '/super-admin/subscriptions',
     },
     {
       title: 'Tổng người dùng',
-      value: companies.reduce((s, c) => s + c.totalUsers, 0),
+      value: companies.reduce((s, c) => s + (c.total_users || 0), 0),
       icon: Users,
       color: 'bg-purple-50 text-purple-600',
       change: '',
@@ -84,6 +83,14 @@ export default function SuperAdminDashboard() {
     suspended: 'Tạm khóa',
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -127,11 +134,11 @@ export default function SuperAdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {companies.map((company) => (
+              {companies.slice(0, 5).map((company) => (
                 <div key={company.id} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div>
                     <p className="font-medium text-slate-800 text-sm">{company.name}</p>
-                    <p className="text-xs text-slate-400">{company.ownerEmail} · {company.totalUsers} users</p>
+                    <p className="text-xs text-slate-400">{company.owner_email} · {company.total_users} users</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[company.plan]}`}>
@@ -143,6 +150,9 @@ export default function SuperAdminDashboard() {
                   </div>
                 </div>
               ))}
+              {companies.length === 0 && (
+                <p className="text-slate-500 text-sm text-center py-4">Chưa có công ty nào</p>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -10,20 +10,24 @@ import {
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Trash2, Plus, Search, Building2, Loader2, AlertCircle } from 'lucide-react';
+import { PermissionGate } from '@/components/ui/PermissionGate';
 import { useRouter } from 'next/navigation';
-import { useBuildings } from '@/lib/hooks/useEntities';
+import { useBuildings, useLandlords, useEmployees } from '@/lib/hooks/useEntities';
 import { useAuth } from '@/lib/auth/AuthContext';
 import type { DBBuilding } from '@/lib/supabase/types';
 
 export default function BuildingsPage() {
   const { company } = useAuth();
   const { items: buildingList, loading, error, add, update, remove } = useBuildings(company?.id);
+  const { items: landlordList } = useLandlords(company?.id);
+  const { items: employeeList } = useEmployees(company?.id);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterArea, setFilterArea] = useState('');
   const [editItem, setEditItem] = useState<DBBuilding | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
 
   const areas = Array.from(new Set(buildingList.map((b) => b.area).filter(Boolean)));
 
@@ -49,7 +53,8 @@ export default function BuildingsPage() {
       total_rooms: Number(formData.get('total_rooms')) || 0,
       description: formData.get('description') as string || null,
       image_url: null,
-      landlord_id: null,
+      landlord_id: formData.get('landlord_id') as string || null,
+      manager_ids: selectedManagers,
     };
 
     if (editItem) {
@@ -62,8 +67,16 @@ export default function BuildingsPage() {
     setEditItem(null);
   };
 
-  const openAdd = () => { setEditItem(null); setIsDialogOpen(true); };
-  const openEdit = (item: DBBuilding) => { setEditItem(item); setIsDialogOpen(true); };
+  const openAdd = () => {
+    setEditItem(null);
+    setSelectedManagers([]);
+    setIsDialogOpen(true);
+  };
+  const openEdit = (item: DBBuilding) => {
+    setEditItem(item);
+    setSelectedManagers(item.manager_ids || []);
+    setIsDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -72,35 +85,108 @@ export default function BuildingsPage() {
           <h1 className="text-2xl font-bold text-slate-800">Quản lý Tòa nhà</h1>
           <p className="text-slate-500">Quản lý tòa nhà và thông tin chi tiết</p>
         </div>
+        <PermissionGate roles={['company_admin']}>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Thêm tòa nhà</Button>
+            <Button onClick={openAdd}><Plus className="mr-2 h-4 w-4" /> Thêm tòa nhà</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>{editItem ? 'Chỉnh sửa' : 'Thêm'} tòa nhà</DialogTitle>
+              <DialogTitle>{editItem ? 'Cập nhật tòa nhà' : 'Thêm tòa nhà mới'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4 pt-4">
+            <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><Label htmlFor="code">Mã tòa nhà</Label><Input id="code" name="code" defaultValue={editItem?.code} required /></div>
-                <div><Label htmlFor="name">Tên tòa nhà</Label><Input id="name" name="name" defaultValue={editItem?.name} required /></div>
+                <div className="space-y-2">
+                  <Label>Mã tòa nhà</Label>
+                  <Input name="code" defaultValue={editItem?.code} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tên tòa nhà</Label>
+                  <Input name="name" defaultValue={editItem?.name} required />
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div><Label htmlFor="area">Khu vực</Label><Input id="area" name="area" defaultValue={editItem?.area} required /></div>
-                <div><Label htmlFor="year_built">Năm xây dựng</Label><Input id="year_built" name="year_built" type="number" defaultValue={editItem?.year_built ?? ''} /></div>
+                <div className="space-y-2">
+                  <Label>Khu vực</Label>
+                  <Input name="area" defaultValue={editItem?.area ?? ''} placeholder="Ví dụ: Quận 1" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="landlord_id">Chủ nhà phụ trách</Label>
+                  <select
+                    id="landlord_id"
+                    name="landlord_id"
+                    defaultValue={editItem?.landlord_id ?? ''}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    required
+                  >
+                    <option value="" disabled>-- Chọn chủ nhà --</option>
+                    {landlordList.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.code ? `${l.code} - ` : ''}{l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div><Label htmlFor="address">Địa chỉ</Label><Input id="address" name="address" defaultValue={editItem?.address ?? ''} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label htmlFor="total_floors">Số tầng</Label><Input id="total_floors" name="total_floors" type="number" defaultValue={editItem?.total_floors} required /></div>
-                <div><Label htmlFor="total_rooms">Số phòng</Label><Input id="total_rooms" name="total_rooms" type="number" defaultValue={editItem?.total_rooms} required /></div>
+
+              <div className="space-y-2">
+                <Label>Địa chỉ</Label>
+                <Input name="address" defaultValue={editItem?.address ?? ''} />
               </div>
-              <div><Label htmlFor="description">Mô tả</Label><Input id="description" name="description" defaultValue={editItem?.description ?? ''} /></div>
-              <Button type="submit" className="w-full" disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Lưu
-              </Button>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Năm XD</Label>
+                  <Input name="year_built" type="number" defaultValue={editItem?.year_built ?? ''} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Số tầng</Label>
+                  <Input name="total_floors" type="number" defaultValue={editItem?.total_floors ?? 0} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Số phòng</Label>
+                  <Input name="total_rooms" type="number" defaultValue={editItem?.total_rooms ?? 0} required />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Mô tả</Label>
+                <Input name="description" defaultValue={editItem?.description ?? ''} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Quản lý tòa nhà</Label>
+                <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[40px] bg-white">
+                  {employeeList.map((emp) => (
+                    <Badge
+                      key={emp.id}
+                      variant={selectedManagers.includes(emp.id) ? 'default' : 'outline'}
+                      className="cursor-pointer select-none"
+                      onClick={() => setSelectedManagers(prev => 
+                        prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                      )}
+                    >
+                      {emp.name}
+                    </Badge>
+                  ))}
+                  {employeeList.length === 0 && (
+                    <div className="text-slate-400 text-xs py-1 text-center w-full">Chưa có nhân viên nào</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>Hủy</Button>
+                <Button type="submit" disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Lưu thông tin
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
+        </PermissionGate>
       </div>
 
       {error && (
@@ -157,8 +243,12 @@ export default function BuildingsPage() {
                       <td className="px-4 py-3 text-slate-600">{item.total_rooms}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); remove(item.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          <PermissionGate roles={['company_admin', 'manager']}>
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }}><Pencil className="h-4 w-4" /></Button>
+                          </PermissionGate>
+                          <PermissionGate roles={['company_admin']}>
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); remove(item.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>

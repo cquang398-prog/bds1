@@ -4,11 +4,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, Loader2 } from 'lucide-react';
+
 
 const schema = z.object({
   customerName: z.string().min(1, 'Vui lòng nhập họ tên'),
@@ -26,17 +27,20 @@ interface ViewingProperty {
   id: string;
   title: string;
   address: string;
+  area?: string;
 }
 
 interface ViewingRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  companyId: string;
   property: ViewingProperty | null;
 }
 
 export function ViewingRequestDialog({
   open,
   onOpenChange,
+  companyId,
   property,
 }: ViewingRequestDialogProps) {
   const {
@@ -48,34 +52,42 @@ export function ViewingRequestDialog({
     resolver: zodResolver(schema),
   });
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     if (!property) return;
 
-    const request = {
-      propertyId: property.id,
-      propertyTitle: property.title,
-      propertyAddress: property.address,
-      customerName: data.customerName,
-      customerPhone: data.customerPhone,
-      viewingDate: data.viewingDate,
-      viewingTime: data.viewingTime,
-      createdAt: new Date().toISOString(),
-    };
-
     try {
-      const existing = localStorage.getItem('viewing_requests');
-      const list = existing ? JSON.parse(existing) : [];
-      list.push(request);
-      localStorage.setItem('viewing_requests', JSON.stringify(list));
-    } catch {}
+      const response = await fetch('/api/appointments/public', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          companyId,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          property,
+          viewingDate: data.viewingDate,
+          viewingTime: data.viewingTime,
+        }),
+      });
 
-    toast.success('Đặt lịch xem thành công', {
-      description: 'Chúng tôi sẽ liên hệ với bạn sớm nhất.',
-      duration: 4000,
-    });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gửi yêu cầu thất bại');
+      }
 
-    reset();
-    onOpenChange(false);
+      toast.success('Đặt lịch xem thành công', {
+        description: 'Chúng tôi sẽ liên hệ với bạn sớm nhất.',
+        duration: 4000,
+      });
+
+      reset();
+      onOpenChange(false);
+    } catch (error: any) {
+      toast.error('Không thể gửi yêu cầu', {
+        description: error.message || 'Vui lòng thử lại sau ít phút.',
+      });
+    }
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -91,10 +103,10 @@ export function ViewingRequestDialog({
             <Calendar className="h-5 w-5" />
             Đặt Lịch Hẹn Xem
           </DialogTitle>
+          <DialogDescription className="hidden">Mô tả lịch hẹn</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 pt-1">
-          {/* Property info banner */}
           {property && (
             <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 space-y-1">
               <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">
@@ -110,7 +122,6 @@ export function ViewingRequestDialog({
             </div>
           )}
 
-          {/* Họ và tên */}
           <div className="space-y-1.5">
             <Label htmlFor="vr-name">
               Họ và tên <span className="text-red-500">*</span>
@@ -126,7 +137,6 @@ export function ViewingRequestDialog({
             )}
           </div>
 
-          {/* Số điện thoại */}
           <div className="space-y-1.5">
             <Label htmlFor="vr-phone">
               Số điện thoại <span className="text-red-500">*</span>
@@ -143,7 +153,6 @@ export function ViewingRequestDialog({
             )}
           </div>
 
-          {/* Ngày & Giờ — 2 columns */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="vr-date">
@@ -178,8 +187,17 @@ export function ViewingRequestDialog({
           </div>
 
           <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-            <Calendar className="h-4 w-4 mr-2" />
-            Gửi yêu cầu
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Đang gửi...
+              </>
+            ) : (
+              <>
+                <Calendar className="h-4 w-4 mr-2" />
+                Gửi yêu cầu
+              </>
+            )}
           </Button>
         </form>
       </DialogContent>

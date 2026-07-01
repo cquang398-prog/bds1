@@ -9,18 +9,40 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Phone, Mail, MapPin, Clock, Send, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createConsultation } from '@/lib/supabase/repositories/consultations';
 import { createLead, createLeadActivity } from '@/lib/supabase/repositories/leads';
-
-const contactInfo = [
-  { icon: Phone, label: 'Hotline', value: '(028) 1234-5678', href: 'tel:02812345678' },
-  { icon: Mail, label: 'Email', value: 'contact@realhome.vn', href: 'mailto:contact@realhome.vn' },
-  { icon: MapPin, label: 'Địa chỉ', value: '123 Đường Nguyễn Huệ, Quận 1, TP.HCM', href: null },
-  { icon: Clock, label: 'Giờ làm việc', value: 'Thứ 2 – Thứ 7: 8:00 – 18:00', href: null },
-];
+import { useCustomerCompany } from '@/components/customer/CustomerCompanyProvider';
 
 export default function ContactPage() {
+  const { company } = useCustomerCompany();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const contactInfo = [
+    {
+      icon: Phone,
+      label: 'Hotline',
+      value: company?.phone || '(028) 1234-5678',
+      href: company?.phone ? `tel:${company.phone.replace(/\D/g, '')}` : 'tel:02812345678',
+    },
+    {
+      icon: Mail,
+      label: 'Email',
+      value: company?.domain ? `contact@${company.domain}` : 'contact@realhome.vn',
+      href: company?.domain ? `mailto:contact@${company.domain}` : 'mailto:contact@realhome.vn',
+    },
+    {
+      icon: MapPin,
+      label: 'Địa chỉ',
+      value: company?.address || '123 Đường Nguyễn Huệ, Quận 1, TP.HCM',
+      href: null,
+    },
+    {
+      icon: Clock,
+      label: 'Giờ làm việc',
+      value: 'Thứ 2 – Thứ 7: 8:00 – 18:00',
+      href: null,
+    },
+  ];
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,9 +57,15 @@ export default function ContactPage() {
     const messageText = fd.get('message') as string;
     const message = subject ? `[${subject}] ${messageText}` : messageText;
 
+    if (!company?.id) {
+      setError('Không xác định được công ty. Vui lòng tải lại trang.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 1. Create consultation record
-      const consultation = await createConsultation({
+      await createConsultation({
+        company_id: company.id,
         full_name,
         phone,
         email,
@@ -45,9 +73,8 @@ export default function ContactPage() {
         source: 'website',
       });
 
-      // 2. Create CRM lead
       const lead = await createLead({
-        company_id: null,
+        company_id: company.id,
         full_name,
         phone,
         email: email ?? null,
@@ -63,12 +90,11 @@ export default function ContactPage() {
         last_contacted_at: null,
       });
 
-      // 3. Create initial lead activity
       await createLeadActivity({
         lead_id: lead.id,
-        company_id: null,
+        company_id: company.id,
         type: 'note',
-        content: 'Lead created from website consultation form',
+        content: 'Lead tạo từ form liên hệ website',
         old_status: null,
         new_status: null,
         created_by: null,

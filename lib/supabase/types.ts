@@ -6,6 +6,13 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type AuditInsert<T> = Omit<T, 'id' | 'created_at' | 'updated_at' | 'created_by' | 'updated_by'> & {
+  id?: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+
+
 export interface Database {
   public: {
     Tables: {
@@ -45,6 +52,8 @@ export interface Database {
           notes: string | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['subscriptions']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['subscriptions']['Insert']>;
@@ -85,6 +94,8 @@ export interface Database {
           last_contacted_at: string | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['leads']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['leads']['Insert']>;
@@ -123,6 +134,8 @@ export interface Database {
           source: 'website' | 'phone' | 'email' | 'walk_in';
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['consultations']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['consultations']['Insert']>;
@@ -172,6 +185,8 @@ export interface Database {
           is_system: boolean;
           users_count: number;
           created_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['roles']['Row'], 'id' | 'created_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['roles']['Insert']>;
@@ -215,6 +230,8 @@ export interface Database {
           status: 'on_track' | 'behind' | 'exceeded';
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['employee_kpis']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['employee_kpis']['Insert']>;
@@ -234,10 +251,13 @@ export interface Database {
           description: string | null;
           image_url: string | null;
           landlord_id: string | null;
+          manager_ids?: string[] | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
-        Insert: Omit<Database['public']['Tables']['buildings']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Insert: Omit<Database['public']['Tables']['buildings']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string; manager_ids?: string[] | null };
         Update: Partial<Database['public']['Tables']['buildings']['Insert']>;
         Relationships: [];
       };
@@ -246,6 +266,7 @@ export interface Database {
           id: string;
           company_id: string | null;
           name: string;
+          code?: string | null;
           phone: string | null;
           email: string | null;
           address: string | null;
@@ -253,8 +274,10 @@ export interface Database {
           properties_count: number;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
-        Insert: Omit<Database['public']['Tables']['landlords']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Insert: Omit<Database['public']['Tables']['landlords']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string; code?: string | null };
         Update: Partial<Database['public']['Tables']['landlords']['Insert']>;
         Relationships: [];
       };
@@ -274,6 +297,8 @@ export interface Database {
           description: string | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['rooms']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['rooms']['Insert']>;
@@ -297,6 +322,8 @@ export interface Database {
           assigned_to_name: string | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['appointments']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['appointments']['Insert']>;
@@ -311,6 +338,8 @@ export interface Database {
           content: string | null;
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['contract_templates']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['contract_templates']['Insert']>;
@@ -329,9 +358,87 @@ export interface Database {
           status: 'active' | 'inactive';
           created_at: string;
           updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['employees']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Database['public']['Tables']['employees']['Insert']>;
+        Relationships: [];
+      };
+      deposit_contracts: {
+        Row: {
+          id: string;
+          company_id: string;
+          room_id: string | null;
+          contract_code: string;
+          status: 'draft' | 'active' | 'signed' | 'converted' | 'cancelled' | 'forfeited' | 'refunded';
+          agreement_date: string;
+          sign_location: string | null;
+          party_a_name: string;
+          party_a_dob: string | null;
+          party_a_address: string | null;
+          party_a_id_card: string | null;
+          party_a_id_date: string | null;
+          party_a_id_place: string | null;
+          party_a_phone: string | null;
+          party_b_name: string;
+          party_b_phone: string;
+          party_b_dob: string | null;
+          party_b_id_card: string | null;
+          party_b_id_date: string | null;
+          party_b_id_place: string | null;
+          party_b_address: string | null;
+          rent_price: number;
+          electricity_price: number;
+          water_price: string;
+          service_price: string;
+          other_services: Json;
+          tenant_count: number;
+          payment_method: string | null;
+          lease_duration_months: number;
+          termination_notice_days: number;
+          room_repair_support_date: string | null;
+          deposit_amount: number;
+          deadline_sign_contract: string;
+          deposit_payment_type: 'cash' | 'transfer' | 'both';
+          bank_name: string | null;
+          bank_account_number: string | null;
+          bank_account_owner: string | null;
+          transfer_content_template: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Insert: Omit<Database['public']['Tables']['deposit_contracts']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['deposit_contracts']['Insert']>;
+        Relationships: [];
+      };
+      favorites: {
+        Row: {
+          id: string;
+          user_id: string;
+          room_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['favorites']['Row'], 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['favorites']['Insert']>;
+        Relationships: [];
+      };
+      tenant_invitations: {
+        Row: {
+          id: string;
+          email: string;
+          company_id: string;
+          profile_id: string;
+          token_hash: string;
+          expires_at: string;
+          used_at?: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['tenant_invitations']['Row'], 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['tenant_invitations']['Insert']>;
         Relationships: [];
       };
     };
@@ -361,3 +468,6 @@ export type DBRoom = Database['public']['Tables']['rooms']['Row'];
 export type DBAppointment = Database['public']['Tables']['appointments']['Row'];
 export type DBContractTemplate = Database['public']['Tables']['contract_templates']['Row'];
 export type DBEmployee = Database['public']['Tables']['employees']['Row'];
+export type DBDepositContract = Database['public']['Tables']['deposit_contracts']['Row'];
+export type DBFavorite = Database['public']['Tables']['favorites']['Row'];
+export type DBTenantInvitation = Database['public']['Tables']['tenant_invitations']['Row'];

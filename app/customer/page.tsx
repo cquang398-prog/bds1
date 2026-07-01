@@ -1,22 +1,31 @@
+'use client';
+
+import { useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { properties } from '@/lib/data/mock-data';
-import { ArrowRight, MapPin, Bed, Bath, Square, Phone, Building2 } from 'lucide-react';
+import { useCustomerCompany } from '@/components/customer/CustomerCompanyProvider';
+import { usePublicListings } from '@/lib/hooks/usePublicListings';
+import { LISTING_STATUS_LABELS } from '@/lib/customer/constants';
+import { ArrowRight, MapPin, Bed, Bath, Square, Phone, Building2, Loader2 } from 'lucide-react';
 
 export default function CustomerHomePage() {
-  const featuredProperties = properties.slice(0, 3);
+  const { company, companies, loading: companyLoading } = useCustomerCompany();
+  const { listings, loading: listingsLoading } = usePublicListings(
+    useMemo(() => companies.map((c) => c.id), [companies])
+  );
+  const featuredProperties = listings.slice(0, 3);
+  const loading = companyLoading || listingsLoading;
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section */}
       <section className="relative h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <Image
             src="https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg?auto=compress&cs=tinysrgb&w=1600"
-            alt="Bất động sản"
+            alt="Bất động sản RealHome"
             fill
             className="object-cover"
             priority
@@ -28,7 +37,9 @@ export default function CustomerHomePage() {
             Tìm Bất Động Sản Mơ Ước
           </h1>
           <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto text-white/90">
-            Khám phá ngôi nhà, căn hộ hoặc không gian thương mại hoàn hảo. Chúng tôi cung cấp đa dạng bất động sản phù hợp mọi phong cách sống và ngân sách.
+            {company
+              ? `${company.name} — khám phá căn hộ và không gian phù hợp mọi phong cách sống.`
+              : 'Khám phá ngôi nhà, căn hộ hoặc không gian thương mại hoàn hảo cùng RealHome.'}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild className="bg-white text-slate-900 hover:bg-white/90">
@@ -41,7 +52,6 @@ export default function CustomerHomePage() {
         </div>
       </section>
 
-      {/* Featured Properties */}
       <section className="py-16 bg-white">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
@@ -57,62 +67,69 @@ export default function CustomerHomePage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredProperties.map((property) => (
-              <Link key={property.id} href={`/customer/properties/${property.id}`}>
-                <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
-                  <div className="relative h-48">
-                    <Image
-                      src={property.images[0]}
-                      alt={property.title}
-                      fill
-                      className="object-cover"
-                    />
-                    <div className="absolute top-3 right-3">
-                      <Badge variant={property.status === 'available' ? 'default' : 'secondary'}>
-                        {property.status === 'available' ? 'Còn trống' : property.status === 'rented' ? 'Đã cho thuê' : property.status === 'sold' ? 'Đã bán' : 'Đang chờ'}
-                      </Badge>
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+            </div>
+          ) : featuredProperties.length === 0 ? (
+            <p className="text-center text-slate-500 py-12">Chưa có bất động sản nào được đăng.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredProperties.map((property) => (
+                <Link key={property.id} href={`/customer/properties/${property.id}`}>
+                  <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
+                    <div className="relative h-48">
+                      <Image
+                        src={property.imageUrl}
+                        alt={property.title}
+                        fill
+                        className="object-cover"
+                      />
+                      <div className="absolute top-3 right-3">
+                        <Badge variant={property.status === 'available' ? 'default' : 'secondary'}>
+                          {LISTING_STATUS_LABELS[property.status]}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                  <CardHeader className="pb-2">
-                    <h3 className="text-lg font-semibold text-slate-800">{property.title}</h3>
-                    <div className="flex items-center gap-1 text-sm text-slate-500">
-                      <MapPin className="h-4 w-4" />
-                      {property.area}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
-                      <span className="flex items-center gap-1">
-                        <Bed className="h-4 w-4" />
-                        {property.bedrooms}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Bath className="h-4 w-4" />
-                        {property.bathrooms}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Square className="h-4 w-4" />
-                        {property.size}m²
-                      </span>
-                    </div>
-                    <p className="text-xl font-bold text-slate-800">
-                      {property.price.toLocaleString('vi-VN')}đ/tháng
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                    <CardHeader className="pb-2">
+                      <h3 className="text-lg font-semibold text-slate-800">{property.title}</h3>
+                      <div className="flex items-center gap-1 text-sm text-slate-500">
+                        <MapPin className="h-4 w-4" />
+                        {property.area}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
+                        <span className="flex items-center gap-1">
+                          <Bed className="h-4 w-4" />
+                          {property.bedrooms}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Bath className="h-4 w-4" />
+                          {property.bathrooms}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Square className="h-4 w-4" />
+                          {property.size}m²
+                        </span>
+                      </div>
+                      <p className="text-xl font-bold text-slate-800">
+                        {property.price.toLocaleString('vi-VN')}đ/tháng
+                      </p>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Stats Section */}
       <section className="py-16 bg-slate-50">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div>
-              <div className="text-4xl font-bold text-slate-800">500+</div>
+              <div className="text-4xl font-bold text-slate-800">{listings.length || '—'}</div>
               <div className="text-slate-600 mt-2">Bất động sản</div>
             </div>
             <div>
@@ -131,11 +148,10 @@ export default function CustomerHomePage() {
         </div>
       </section>
 
-      {/* Why Choose Us */}
       <section className="py-16 bg-white">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center text-slate-800 mb-12">
-            Tại Sao Chọn EstatePro
+            Tại Sao Chọn RealHome
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="text-center">
