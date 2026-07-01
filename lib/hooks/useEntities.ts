@@ -6,7 +6,8 @@ import { getAppointments, createAppointment, updateAppointment, deleteAppointmen
 import { getContractTemplates, createContractTemplate, updateContractTemplate, deleteContractTemplate } from '@/lib/supabase/repositories/contracts';
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee } from '@/lib/supabase/repositories/employees';
 import { getDepositContracts, createDepositContract, updateDepositContract, deleteDepositContract, type DepositContractWithRoom } from '@/lib/supabase/repositories/deposit_contracts';
-import type { DBBuilding, DBLandlord, DBRoom, DBAppointment, DBContractTemplate, DBEmployee, DBDepositContract } from '@/lib/supabase/types';
+import { getRentalContracts, createRentalContract, updateRentalContract, deleteRentalContract, type RentalContractWithRoom } from '@/lib/supabase/repositories/rental_contracts';
+import type { DBBuilding, DBLandlord, DBRoom, DBAppointment, DBContractTemplate, DBEmployee, DBDepositContract, DBRentalContract } from '@/lib/supabase/types';
 
 
 function makeHook<T>(
@@ -197,6 +198,51 @@ export function useRoomsByBuilding(buildingId: string | undefined, companyId?: s
   const remove = async (id: string) => {
     try {
       await deleteRoom(id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return { items, loading, error, refetch: fetch, add, update, remove };
+}
+
+export function useRentalContracts(companyId?: string) {
+  const [items, setItems] = useState<RentalContractWithRoom[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setItems(await getRentalContracts(companyId));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  const add = async (item: any) => {
+    try {
+      const created = await createRentalContract(item);
+      await fetch();
+      return created;
+    } catch (e: any) { setError(e.message); return null; }
+  };
+
+  const update = async (id: string, patch: any) => {
+    try {
+      const updated = await updateRentalContract(id, patch);
+      await fetch();
+      return updated;
+    } catch (e: any) { setError(e.message); return null; }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await deleteRentalContract(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (e: any) { setError(e.message); }
   };

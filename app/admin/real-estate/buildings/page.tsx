@@ -16,6 +16,8 @@ import { useBuildings, useLandlords, useEmployees } from '@/lib/hooks/useEntitie
 import { useAuth } from '@/lib/auth/AuthContext';
 import type { DBBuilding } from '@/lib/supabase/types';
 
+import { ImageUpload } from '@/components/ui/ImageUpload';
+
 export default function BuildingsPage() {
   const { company } = useAuth();
   const { items: buildingList, loading, error, add, update, remove } = useBuildings(company?.id);
@@ -28,6 +30,7 @@ export default function BuildingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const areas = Array.from(new Set(buildingList.map((b) => b.area).filter(Boolean)));
 
@@ -52,7 +55,7 @@ export default function BuildingsPage() {
       total_floors: Number(formData.get('total_floors')) || 0,
       total_rooms: Number(formData.get('total_rooms')) || 0,
       description: formData.get('description') as string || null,
-      image_url: null,
+      image_url: imageUrl,
       landlord_id: formData.get('landlord_id') as string || null,
       manager_ids: selectedManagers,
     };
@@ -65,16 +68,19 @@ export default function BuildingsPage() {
     setSaving(false);
     setIsDialogOpen(false);
     setEditItem(null);
+    setImageUrl(null);
   };
 
   const openAdd = () => {
     setEditItem(null);
     setSelectedManagers([]);
+    setImageUrl(null);
     setIsDialogOpen(true);
   };
   const openEdit = (item: DBBuilding) => {
     setEditItem(item);
     setSelectedManagers(item.manager_ids || []);
+    setImageUrl(item.image_url || null);
     setIsDialogOpen(true);
   };
 
@@ -153,6 +159,11 @@ export default function BuildingsPage() {
               <div className="space-y-2">
                 <Label>Mô tả</Label>
                 <Input name="description" defaultValue={editItem?.description ?? ''} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hình ảnh tòa nhà</Label>
+                <ImageUpload value={imageUrl} onChange={setImageUrl} />
               </div>
 
               <div className="space-y-2">
@@ -236,7 +247,22 @@ export default function BuildingsPage() {
                       }}
                     >
                       <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800 hover:text-blue-600">{item.name}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {item.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={item.image_url} alt={item.name} className="w-10 h-10 object-cover rounded-md border flex-shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 bg-slate-100 rounded-md border flex items-center justify-center text-slate-400 flex-shrink-0">
+                              <Building2 className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-medium text-slate-800 hover:text-blue-600 block">{item.name}</span>
+                            <span className="text-xs text-slate-400 block max-w-[200px] truncate">{item.address || 'Không có địa chỉ'}</span>
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-3"><Badge variant="outline">{item.area}</Badge></td>
                       <td className="px-4 py-3 text-slate-600">{item.year_built ?? '—'}</td>
                       <td className="px-4 py-3 text-slate-600">{item.total_floors}</td>

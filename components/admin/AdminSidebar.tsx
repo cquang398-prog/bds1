@@ -24,6 +24,7 @@ import {
   TrendingUp,
   List,
   UserCheck,
+  Receipt,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,15 @@ const navItems: NavItem[] = [
   },
   { label: 'Chủ nhà', href: '/admin/landlords', icon: UserCheck },
   { label: 'Hợp đồng', href: '/admin/contracts', icon: FileText },
+  {
+    label: 'Hóa đơn & Dịch vụ',
+    href: '/admin/services/readings',
+    icon: Receipt,
+    children: [
+      { label: 'Chỉ số dịch vụ', href: '/admin/services/readings', icon: ClipboardList },
+      { label: 'Hóa đơn tháng', href: '/admin/services/invoices', icon: FileText },
+    ],
+  },
   {
     label: 'Nhân sự',
     href: '/admin/hr/employees',
